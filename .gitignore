@@ -1,0 +1,39 @@
+# Python
+/venv
+/.venv
+*.py[cod]
+__pycache__
+
+# build files
+/pret/buildinfo.py
+/pret.egg-info
+/.pybuild
+/scripts/mkdocs-*/*.egg-info
+/build
+/dist
+/mkdocs*.egg-info
+
+
+# unittest
+*,cover
+/.coverage
+
+# ViM & text
+.*.sw?
+.sw?
+*.bak
+*~
+
+# vscode
+*.code-workspace
+.vscode
+
+# doc
+doc/**/*.html
+/site
+
+# Node.js for debugger app
+node_modules/
+
+# Some local, temp, custom... files
+/tmp
