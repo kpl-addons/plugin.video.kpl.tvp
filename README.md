@@ -19,4 +19,4 @@ Dostępna jest również w repozytorium **[KWP](https://k19.kwp.ovh)**.
 4. Z menu __**Dodatki**__ wybierz __**Zainstaluj z pliku zip**__.
 5. Wskaż wcześniej dodane repozytorium `KPL Addons`
 6. Z menu __**Dodatki**__ wybierz __**Zainstaluj z repozytorium**__ -> __**KPL Addons Core Repository**__
-7. Znajdź na liścię wtyczkę **TVP (Libka)** i zainstaluj.
+7. Znajdź na liście wtyczkę **TVP (Libka)** i zainstaluj.
