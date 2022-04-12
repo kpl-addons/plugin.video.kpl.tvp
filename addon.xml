@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
-<addon id="plugin.video.kpl.tvp" name="TVP (KPL Team)" version="0.1.0" provider-name="KPL Addons Team">
+<addon id="plugin.video.kpl.tvp" name="TVP (Libka)" version="0.1.0" provider-name="KPL Addons Team">
 	<requires>
 		<import addon="xbmc.python" version="3.0.0"/>
 		<import addon="script.module.libka"/>
@@ -18,7 +18,7 @@
 		<language>en, pl</language>
 		<platform>all</platform>
 		<license>MIT</license>
-		<website>https://github.com/kpl-addons/plugin.video.tvpgo</website>
+		<website>https://github.com/kpl-addons/plugin.video.kpl.tvp</website>
 		<assets>
 			<icon>resources/icon.png</icon>
 			<fanart>resources/fanart.jpg</fanart>
