@@ -1,11 +1,12 @@
 
 from libka import L, Plugin, Site
-from libka import call, PathArg
+from libka import call, PathArg, entry
 from libka.logs import log
 from libka.url import URL
 from libka.path import Path
 from pdom import select as dom_select
 import json
+from fnmatch import fnmatch
 from collections import namedtuple
 from html import unescape
 import re
@@ -93,8 +94,21 @@ class TvpVodSite(Site):
     """vod.tvp.pl site."""
 
 
+Menu = namedtuple('Menu', 'id title call items', defaults=(None, None, None, None))
+MenuItems = namedtuple('MenuItems', 'id type order', defaults=(None, None))
+
+
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
+
+    MENU = Menu(items=[
+        Menu(call='tv'),
+        MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale'}),
+        Menu(title='Sport', items=[
+            Menu(title='Retransmisje', id=48583081),
+        ]),
+        Menu(call='search'),
+    ])
 
     def __init__(self):
         super().__init__()
@@ -103,15 +117,72 @@ class TvpPlugin(Plugin):
         self.limit = 1000
 
     def home(self):
-        self.listing(2)
+        with self.directory() as kdir:
+            kdir.menu(L('Tests'), self.tests)
+            self._menu(kdir)
+        # 48583081 - retransmisje
         # self.listing(41055208)  # sezon
         # self.listing(1649941)  # seriale (mtr81)
+
+    def tests(self):
+        with self.directory() as kdir:
+            kdir.menu(L('API Tree'), call(self.listing, 2))
+            kdir.menu('VoD', call(self.listing, 1785454))
+            kdir.menu('Retransmisje', call(self.listing, 48583081))
+        # 48583081 - retransmisje
+        # self.listing(41055208)  # sezon
+        # self.listing(1649941)  # seriale (mtr81)
+
+    def _menu(self, kdir, pos=''):
+        pos = [int(v) for v in pos.split(',') if v]
+        menu = self.MENU
+        for p in pos:
+            menu = menu.items[p]
+        for i, ent in enumerate(menu.items):
+            if isinstance(ent, MenuItems):
+                def order(it):
+                    title = it.get('title', '').lower()
+                    for k, vv in (ent.order or {}).items():
+                        if type(vv) is str:
+                            vv = (vv,)
+                        for v in vv:
+                            if fnmatch(v, title):
+                                return -k
+                    return 0
+
+                # order = {v: -k for k, vv in (ent.order or {}).items() for v in ((vv,) if type(vv) is str else vv)}
+                with kdir.items_block() as blk:
+                    for j, it in enumerate(self._get_items(ent.id)):
+                        self._item(kdir, it, custom=(i, order(it), j))
+                    blk.sort_items(key=lambda item: item.custom)
+            elif ent.call:
+                kdir.menu(ent.title, getattr(self, ent.call, ent.call), custom=(i,))
+            elif ent.id:
+                kdir.menu(ent.title, call(self.listing, ent.id))
+            else:
+                kdir.menu(ent.title, call(self.menu, i))
+
+    def tv(self):
+        ...
+
+    def menu(self, pos: PathArg = ''):
+        with self.directory() as kdir:
+            self._menu(kdir, pos)
+
+    def enter_listing(self, id: PathArg[int]):
+        # type = 0  - ShowAndGetNumber
+        n = xbmcgui.Dialog().numeric(0, 'ID', str(id))
+        if n:
+            n = int(n)
+            if n > 0:
+                self.refresh(call(self.listing, n))
 
     def listing(self, id: PathArg[int], type=None):
         """Use api.v3.tvp.pl JSON listing."""
         with self.directory() as kdir:
-            kdir.menu(f'=== {id}', call(self.listing, id=id))  # XXX DEBUG
-            data = self.site.jget(None, params={'count': self.limit, 'parent_id': id})
+            kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
+            # data = self.site.jget(None, params={'count': self.limit, 'parent_id': id})
+            data = self._get(id)
             items = data.get('items') or ()
             if items:
                 parents = items[0]['parents'][1:]
@@ -124,34 +195,50 @@ class TvpPlugin(Plugin):
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
             for item in items:
-                itype = item.get('object_type')
-                # format title
-                title = item['title']
-                if item.get('website_title'):
-                    title = f'{item["website_title"]}: {title}'
-                elif item.get('title_root'):
-                    title = item['title_root']
-                if title[:1].islower():
-                    title = title[0].upper() + title[1:]
-                title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
-                # image
-                image = None
-                for img_attr in ('image', 'image_16x9', *(key for key in item if key.startswith('image_'))):
-                    for img_data in item.get(img_attr) or ():
-                        image = image_link(img_data)
-                        if image:
-                            break
-                    else:  # double for break trick
-                        continue
+                self._item(kdir, item)
+
+    def _get(self, id):
+        return self.site.jget(None, params={'count': self.limit, 'parent_id': id})
+
+    def _get_items(self, id):
+        for it in self._get(id).get('items') or ():
+            yield it
+
+    def _item(self, kdir, item, *, custom=None):
+        itype = item.get('object_type')
+        # format title
+        title = item['title']
+        if item.get('website_title'):
+            title = f'{item["website_title"]}: {title}'
+        elif item.get('title_root'):
+            title = item['title_root']
+        if title[:1].islower():
+            title = title[0].upper() + title[1:]
+        title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
+        # image
+        image = None
+        for img_attr in ('image', 'image_16x9', *(key for key in item if key.startswith('image_'))):
+            for img_data in item.get(img_attr) or ():
+                image = image_link(img_data)
+                if image:
                     break
-                # description
-                descr = item.get('lead_root') or item.get('description_root')
-                descr = remove_tags(descr)
-                # item
-                if itype == 'video':
-                    kdir.play(title, call(self.video, id=item['asset_id']), image=image, descr=descr)
-                else:
-                    kdir.menu(title, call(self.listing, id=item['asset_id']), image=image, descr=descr)
+            else:  # double-for break trick
+                continue
+            break
+        # description
+        descr = item.get('lead_root') or item.get('description_root')
+        descr = remove_tags(descr)
+        if 'commentator' in item:
+            descr += '\n\n[B]Komentarz[/B]\n' + item['commentator']
+        # item
+        if itype == 'video':
+            kdir.play(title, call(self.video, id=item['asset_id']), image=image, descr=descr, custom=custom)
+        else:
+            kdir.menu(title, call(self.listing, id=item['asset_id']), image=image, descr=descr, custom=custom)
+
+    @entry(title=L('TV'))
+    def tv(self):
+        ...
 
     def X_home(self):
         with self.directory() as kdir:
@@ -330,7 +417,11 @@ class TvpPlugin(Plugin):
         url = URL('https://vod.tvp.pl/sess/TVPlayer2/api.php?id={aId}&@method=getTvpConfig&@callback=?')
         resp = self.site.get(url).text
         respJSON = re.findall(r'_\((.*)\)', resp, re.DOTALL)[0]
-        data = json.loads(respJSON)['content']
+        try:
+            data = json.loads(respJSON)['content']
+        except Exception as exc:
+            log.warning(f'Subtiles JSON failed {exc} on {respJSON!r}', title='TVP')
+            return []
         subt = []
         path = self.profile_path / 'temp'
         if 'subtitles' in data and len(data['subtitles']):
