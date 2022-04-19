@@ -9,6 +9,7 @@ import json
 from fnmatch import fnmatch
 from collections import namedtuple
 from html import unescape
+from datetime import datetime, timedelta
 import re
 import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
@@ -60,6 +61,8 @@ def linkid(url):
 
 def image_link(image):
     """Return URL to image by its JSON item."""
+    if 'file_name' not in image:
+        return None
     fname: str = image['file_name']
     name, _, ext = fname.rpartition('.')
     width = image.get('width', 1280)
@@ -82,9 +85,6 @@ class Info(namedtuple('Info', 'data type url title image descr series linkid')):
             # TODO:  dodać analizę w zlaezności od typu i różnic w obu linkach
             #        np. "video" i takie same linki wskazuję bezpośrednio film
             image = data['image']
-            # if 'width' in image and 'height' in image:
-            #     image = re.sub(r'width_\d+', 'width_1280', image)
-            #     image = re.sub(r'height_\d+', 'height_760', image)
             return Info(data, type=data['type'], url=url, title=data['title'], image=image,
                         descr=data.get('description'), series=(eLink != sLink),
                         linkid=url.path.rpartition(',')[2])
@@ -106,35 +106,33 @@ class TvpPlugin(Plugin):
 
     MENU = Menu(items=[
         Menu(call='tv'),
-        MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale'}),
+        MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         Menu(title='Sport', items=[
+            Menu(title='Transmisje', call='sport'),
             Menu(title='Retransmisje', id=48583081),
+            Menu(title='Magazyny', id=548368),
+            Menu(title='Wideo', id=432801),
         ]),
+        Menu(title='TVP Info', id=191888),
         Menu(call='search'),
     ])
 
     def __init__(self):
         super().__init__()
         # self.vod = Site(base='https://vod.tvp.pl')
-        self.site = Site(base='http://www.api.v3.tvp.pl/shared/listing.php?dump=json&direct=true')
+        self.site = Site(base='http://www.api.v3.tvp.pl/shared/listing.php?dump=json')
         self.limit = 1000
 
     def home(self):
         with self.directory() as kdir:
             kdir.menu(L('Tests'), self.tests)
             self._menu(kdir)
-        # 48583081 - retransmisje
-        # self.listing(41055208)  # sezon
-        # self.listing(1649941)  # seriale (mtr81)
 
     def tests(self):
         with self.directory() as kdir:
             kdir.menu(L('API Tree'), call(self.listing, 2))
             kdir.menu('VoD', call(self.listing, 1785454))
             kdir.menu('Retransmisje', call(self.listing, 48583081))
-        # 48583081 - retransmisje
-        # self.listing(41055208)  # sezon
-        # self.listing(1649941)  # seriale (mtr81)
 
     def _menu(self, kdir, pos=''):
         pos = [int(v) for v in pos.split(',') if v]
@@ -149,14 +147,14 @@ class TvpPlugin(Plugin):
                         if type(vv) is str:
                             vv = (vv,)
                         for v in vv:
-                            if fnmatch(v, title):
+                            if fnmatch(title, v):
                                 return -k
                     return 0
 
-                # order = {v: -k for k, vv in (ent.order or {}).items() for v in ((vv,) if type(vv) is str else vv)}
                 with kdir.items_block() as blk:
                     for j, it in enumerate(self._get_items(ent.id)):
-                        self._item(kdir, it, custom=(i, order(it), j))
+                        if not ent.type or it.get('object_type') == ent.type:
+                            self._item(kdir, it, custom=(i, order(it), j))
                     blk.sort_items(key=lambda item: item.custom)
             elif ent.call:
                 kdir.menu(ent.title, getattr(self, ent.call, ent.call), custom=(i,))
@@ -190,7 +188,7 @@ class TvpPlugin(Plugin):
                     kdir.menu('^^^', call(self.listing, id=parents[0]))  # XXX DEBUG
             if len(items) == 1 and items[0].get('object_type') == 'directory_video' and items[0]['title'] == 'wideo':
                 # Oszukany katalog sezonu, pokaż id razu odcinki.
-                data = self.site.jget(None, params={'count': self.limit, 'parent_id': items[0]['asset_id']})
+                data = self.site.jget(None, params={'direct': True, 'count': self.limit, 'parent_id': items[0]['asset_id']})
                 items = data.get('items') or ()
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
@@ -204,8 +202,30 @@ class TvpPlugin(Plugin):
             for ch in self.channel_iter():
                 kdir.menu(ch.name, self.tv, image=ch.img)
 
+    def sport(self, id=13010508):
+        """Sport transmistion (13010508)."""
+        data = self.site.jget(None, params={
+            'direct': False,
+            'count': self.limit,
+            'parent_id': id,
+            'type': 'epg_item',
+            'filter': {'is_live': True},
+            'order': {'release_date_long': -1},  # reversed order - get future
+        })
+        now = datetime.utcnow()
+        with self.directory() as kdir:
+            # Reverse reversed order - get from current to future.
+            for item in reversed(data.get('items') or ()):
+                # Only current and future
+                end = item.get('broadcast_end_date_long', 0)
+                if end:
+                    end = datetime.utcfromtimestamp(end / 1000)
+                    if end < now:
+                        continue  # skip past tranmison
+                self._item(kdir, item)
+
     def _get(self, id):
-        return self.site.jget(None, params={'count': self.limit, 'parent_id': id})
+        return self.site.jget(None, params={'direct': True, 'count': self.limit, 'parent_id': id})
 
     def _get_items(self, id):
         for it in self._get(id).get('items') or ():
@@ -213,6 +233,7 @@ class TvpPlugin(Plugin):
 
     def _item(self, kdir, item, *, custom=None):
         itype = item.get('object_type')
+        iid = item.get('asset_id')
         # format title
         title = item['title']
         if item.get('website_title'):
@@ -222,6 +243,15 @@ class TvpPlugin(Plugin):
         if title[:1].islower():
             title = title[0].upper() + title[1:]
         title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
+        # broadcast time
+        start = item.get('release_date_long', item.get('broadcast_start_long', 0))
+        end = item.get('broadcast_end_date_long', 0)
+        if start and end:
+            start = datetime.utcfromtimestamp(start / 1000)
+            end = datetime.utcfromtimestamp(end / 1000)
+            now = datetime.utcnow()
+            if start > now or 1:
+                title += f' [{start:%H:%M %d.%m.%Y}]'
         # image
         image = None
         for img_attr in ('image', 'image_16x9', *(key for key in item if key.startswith('image_'))):
@@ -238,83 +268,41 @@ class TvpPlugin(Plugin):
         if 'commentator' in item:
             descr += '\n\n[B]Komentarz[/B]\n' + item['commentator']
         # item
-        if itype == 'video':
-            kdir.play(title, call(self.video, id=item['asset_id']), image=image, descr=descr, custom=custom)
+        if itype in ('video', 'epg_item'):
+            if 'video_id' in item:
+                iid = item['video_id']
+            # kwargs = {}
+            # if start:
+            #     kwargs['start_date'] = start.timestamp()
+            # if end:
+            #     kwargs['end_date'] = end.timestamp()
+            kdir.play(title, call(self.video, id=iid), image=image, descr=descr, custom=custom,
+                      menu=[(f'ID {iid}', self.refresh)])
         else:
-            kdir.menu(title, call(self.listing, id=item['asset_id']), image=image, descr=descr, custom=custom)
+            kdir.menu(title, call(self.listing, id=iid), image=image, descr=descr, custom=custom)
 
-    def X_home(self):
-        with self.directory() as kdir:
-            page = self.vod.txtget('')
-            for url, title in dom_select(page, 'ul.mainMenu .mainMenuItem:first-child .subMenu li a(href)::text'):
-                kdir.menu(title.strip().capitalize(), call(self.category, id=linkid(url)))
-                # kdir.menu(title.strip().capitalize(), call(self.listing, type='category', id=linkid(url)))
-
-    def X_category(self, id: PathArg):
-        with self.directory() as kdir:
-            page = self.vod.txtget(f'category/x,{id}')
-            for url, title in dom_select(page, 'section[data-id] h2 a(href)::text'):
-                kdir.menu(title.strip(), call(self.subcategory, id=linkid(url)))
-
-    def X_subcategory(self, id: PathArg):
-        # sel = ('div.strefa-abo__item { a(href), h3::text, img.strefa-abo__img(src),'
-        #        ' .strefa-abo__item-content(data-hover) }')
-        with self.directory() as kdir:
-            page = self.vod.txtget(f'sub-category/x,{id}')
-            # for url, title, img, info in dom_select(page, sel):
-            for info in dom_select(page, '.strefa-abo__item-content(data-hover)'):
-                info = Info.parse(info)
-                if info:
-                    # TODO: add to context-menu play episode from info['episodeLink']
-                    kdir.menu(info.title, call(self.listing, type=info.type, id=info.linkid),
-                              image=info.image, descr=info.descr)
-
-    def X_v_listing(self, type: PathArg, id: PathArg):
-        with self.directory() as kdir:
-            U = self.vod.base / f'{type}/x,{id}'
-            log(f'VOD:  {U}')
-            page = self.vod.txtget(f'{type}/x,{id}')
-            for info in dom_select(page, '.js-hover(data-hover)'):
-                info = Info.parse(info)
-                if info:
-                    title = f'{info.title} ({", ".join(info["types"])})'
-                    kdir.menu(title, call(self.listing, type=info.type, id=info.linkid),
-                              image=info.image, descr=info.descr)
-
-    def X_website(self, id: PathArg):
-        with self.directory() as kdir:
-            page = self.vod.txtget(f'website/x,{id}')
-            for info in dom_select(page, '.strefa-abo__item-content(data-hover)'):
-                info = Info.parse(info)
-                if info:
-                    kdir.menu(info.title, call(self.video, id=info.linkid), image=info.image,
-                              descr=info.descr)
-
-    def X_series(self, id: PathArg, season: PathArg = None):
-        with self.directory() as kdir:
-            if season is None:
-                page = self.vod.txtget(f'website/x,{id}/video', params={'season': season})
-                for url, title in dom_select(page, '.episodes .dropdown-menu li a(href)::text'):
-                    title = title.strip().capitalize()
-                    kdir.menu(title, call(self.series, id=id, season=linkid(url)))
-            else:
-                page = self.vod.txtget(f'website/x,{id}')
-
-            for info in dom_select(page, '.js-hover(data-hover)'):
-                try:
-                    info = Info.parse(info)
-                except (json.JSONDecodeError, KeyError) as exc:
-                    log.warning(f'Can not parse video info {exc} from: {info!r}')
-                    continue
-                kdir.menu(info.title, call(self.video, id=info.linkid), image=info.image,
-                          descr=info.descr)
-
-    # def video(self, id: PathArg):
-    #     with self.directory() as kdir:
-    #         kdir.item('Tu nic jeszcze nie ma !!!', call(self.series, 0))
-
-    def video(self, id: PathArg[int]):
+    def video(self, id: PathArg[int], *, start_date=None, end_date=None):
         """Play video – PlayTVPInfo by mtr81."""
+        # TODO: cleanup
+        data = self.site.jget(f'/shared/details.php?dump=json&object_id={id}')
+        start = data.get('release_date_long', data.get('broadcast_start_long', 0))
+        end = data.get('broadcast_end_date_long', 0)
+        if start:
+            now = datetime.utcnow()
+            start = datetime.utcfromtimestamp(start / 1000)
+            if end:
+                end = datetime.utcfromtimestamp(end / 1000)
+            else:
+                try:
+                    end = start + timedelta(seconds=data['duration'])
+                except KeyError:
+                    end = now + timedelta(days=1)
+            # if not start < now < end:  # sport only current
+            if start > now:  # future
+                xbmcgui.Dialog().notification('TVP', 'Transmisja niedstępna teraz', xbmcgui.NOTIFICATION_INFO)
+                xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
+                return
+
         site = Site()
         url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1'
         resp = site.jget(url)
@@ -363,7 +351,7 @@ class TvpPlugin(Plugin):
                     for d in resp['data']:
                         if 'id' in d:
                             if d['id'] == id:
-                                subt = subt_gen_ABO(d)
+                                subt = self.subt_gen_ABO(d)
                                 if d['is_drm'] is True:  # DRM
                                     url_stream = re.findall('fileDash\': \'([^\']+?)\'', str(resp))[0]
                                     licUrl = re.findall('proxyWidevine\': \'([^\']+?)\'', str(resp))[0]
@@ -412,6 +400,21 @@ class TvpPlugin(Plugin):
             play_item.setSubtitles(subt)
             log(f'PLAY: handle={self.handle!r}, url={stream_url!r}', title='TVP')
             xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
+
+    def subt_gen_ABO(self, d):
+        """Tablica z linkami do plików z napisami (format .ssa)."""
+        subt = []
+        if 'subtitles' in d:
+            if d['subtitles']:
+                path = self.profile_path / 'temp'
+                for n, it in enumerate(d['subtitles']):
+                    urlSubt = it['src']
+                    resp = self.site.get(urlSubt)
+                    ttml = Ttml2SsaAddon()
+                    ttml.parse_ttml_from_string(resp.text)
+                    ttml.write2file(path / f'subt_{n+1:02d}.ssa')
+                    subt.append(path / f'subt_{n+1:02d}.ssa')
+        return subt
 
     def subt_gen_free(self, aId):
         """Tablica z linkami do plików z napisami (format .ssa)."""
