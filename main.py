@@ -66,6 +66,9 @@ def image_link(image):
     return URL(f'http://s.v3.tvp.pl/images/{name[:1]}/{name[1:2]}/{name[2:3]}/uid_{name}_width_{width}_gs_0.{ext}')
 
 
+ChannelInfo = namedtuple('ChannelInfo', 'code name img id')
+
+
 class Info(namedtuple('Info', 'data type url title image descr series linkid')):
 
     @classmethod
@@ -162,9 +165,6 @@ class TvpPlugin(Plugin):
             else:
                 kdir.menu(ent.title, call(self.menu, i))
 
-    def tv(self):
-        ...
-
     def menu(self, pos: PathArg = ''):
         with self.directory() as kdir:
             self._menu(kdir, pos)
@@ -196,6 +196,13 @@ class TvpPlugin(Plugin):
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
             for item in items:
                 self._item(kdir, item)
+
+    @entry(title=L('TV'))
+    def tv(self):
+        """TV channel list."""
+        with self.directory() as kdir:
+            for ch in self.channel_iter():
+                kdir.menu(ch.name, self.tv, image=ch.img)
 
     def _get(self, id):
         return self.site.jget(None, params={'count': self.limit, 'parent_id': id})
@@ -235,10 +242,6 @@ class TvpPlugin(Plugin):
             kdir.play(title, call(self.video, id=item['asset_id']), image=image, descr=descr, custom=custom)
         else:
             kdir.menu(title, call(self.listing, id=item['asset_id']), image=image, descr=descr, custom=custom)
-
-    @entry(title=L('TV'))
-    def tv(self):
-        ...
 
     def X_home(self):
         with self.directory() as kdir:
@@ -433,6 +436,66 @@ class TvpPlugin(Plugin):
                 subt.append(path / f'subt_{n+1:02d}.ssa')
         return subt
 
+    def channel_iter(self):
+        """JSON-live channel list."""
+        query = {
+            "operationName": None,
+            "variables": {
+                "categoryId": None,
+            },
+            # "extensions": {
+            #     "persistedQuery": {
+            #         "version": 1,
+            #         "sha256Hash": "5c29325c442c94a4004432d70f94e336b8c258801fe16946875a873e818c8aca",
+            #     },
+            # },
+            "query": '''
+query {
+    getStationsForMainpage {
+        items {
+            id
+            name
+            code
+            image_square {
+                url
+                width
+                height
+            }
+        }
+    }
+}
+''',
+        }
+        eee = {
+            "operationName": None,
+            "variables": {
+                "stationCode": '',
+                "extensions": {
+                    "persistedQuery": {
+                        "version": 1,
+                        "sha256Hash": "0b9649840619e548b01c33ae4bba6027f86eac5c48279adc04e9ac2533781e6b",
+                    },
+                },
+            }
+        }
+        data = self.site.jpost('https://hbb-prod.tvp.pl/apps/manager/api/hub/graphql', json=query)
+        log(f'data\n{data!r}')
+        for ch in data['data']['getStationsForMainpage']['items']:
+            code = ch['code']
+            name = ch['name']
+            imgdata = ch['image_square']
+            width, height = imgdata['width'], imgdata['height']
+            if not code:
+                ch_id = ch['id']
+                if not width or not height:
+                    width = height = 1000
+            else:
+                ch_id = ''
+                if not width or not height:
+                    width = height = 140
+            img = imgdata['url'].format(width=width, height=height)
+            yield ChannelInfo(code, name, img, ch_id)
+
 
 # DEBUG ONLY
 import sys  # noqa
@@ -440,3 +503,58 @@ log(f'\033[1mTVP\033[0m: \033[93mENTER\033[0m: {sys.argv}')
 
 # Create and run plugin.
 TvpPlugin().run()
+
+
+# Full GraphQL TV list query
+"""
+query ($categoryId: String) {
+    getLandingPageVideos(categoryId: $categoryId) {
+        type
+        title
+        elements {
+            id
+            title
+            subtitle
+            type
+            img {
+                hbbtv
+                image
+                website_holder_16x9
+                video_holder_16x9
+                __typename
+            }
+            broadcast_start_ts
+            broadcast_end_ts
+            sportType
+            label {
+                type
+                text
+                __typename
+            }
+            stats
+            {
+                video_count
+                __typename
+            }
+            __typename
+       }
+        __typename
+    }
+
+    getStationsForMainpage {
+        items {
+            id
+            name
+            code
+            image_square {
+                url
+                __typename
+            }
+            background_color
+            isNativeChanel
+            __typename
+        }
+        __typename
+    }
+}
+"""
