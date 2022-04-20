@@ -4,9 +4,9 @@ from libka import call, PathArg, entry
 from libka.logs import log
 from libka.url import URL
 from libka.path import Path
+from libka.menu import Menu, MenuItems
 from pdom import select as dom_select
 import json
-from fnmatch import fnmatch
 from collections import namedtuple
 from html import unescape
 from datetime import datetime, timedelta
@@ -97,17 +97,17 @@ class TvpVodSite(Site):
     """vod.tvp.pl site."""
 
 
-Menu = namedtuple('Menu', 'id title call items', defaults=(None, None, None, None))
-MenuItems = namedtuple('MenuItems', 'id type order', defaults=(None, None))
-
-
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
 
-    MENU = Menu(items=[
+    MENU = Menu(order_key='title', items=[
         Menu(call='tv'),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         Menu(title='Sport', items=[
+            Menu(title='Submenu test', items=[
+                Menu(title='Transmisje', call='sport'),
+                Menu(title='Retransmisje', id=48583081),
+            ]),
             Menu(title='Transmisje', call='sport'),
             Menu(title='Retransmisje', id=48583081),
             Menu(title='Magazyny', id=548368),
@@ -134,39 +134,6 @@ class TvpPlugin(Plugin):
             kdir.menu('VoD', call(self.listing, 1785454))
             kdir.menu('Retransmisje', call(self.listing, 48583081))
 
-    def _menu(self, kdir, pos=''):
-        pos = [int(v) for v in pos.split(',') if v]
-        menu = self.MENU
-        for p in pos:
-            menu = menu.items[p]
-        for i, ent in enumerate(menu.items):
-            if isinstance(ent, MenuItems):
-                def order(it):
-                    title = it.get('title', '').lower()
-                    for k, vv in (ent.order or {}).items():
-                        if type(vv) is str:
-                            vv = (vv,)
-                        for v in vv:
-                            if fnmatch(title, v):
-                                return -k
-                    return 0
-
-                with kdir.items_block() as blk:
-                    for j, it in enumerate(self._get_items(ent.id)):
-                        if not ent.type or it.get('object_type') == ent.type:
-                            self._item(kdir, it, custom=(i, order(it), j))
-                    blk.sort_items(key=lambda item: item.custom)
-            elif ent.call:
-                kdir.menu(ent.title, getattr(self, ent.call, ent.call), custom=(i,))
-            elif ent.id:
-                kdir.menu(ent.title, call(self.listing, ent.id))
-            else:
-                kdir.menu(ent.title, call(self.menu, i))
-
-    def menu(self, pos: PathArg = ''):
-        with self.directory() as kdir:
-            self._menu(kdir, pos)
-
     def enter_listing(self, id: PathArg[int]):
         # type = 0  - ShowAndGetNumber
         n = xbmcgui.Dialog().numeric(0, 'ID', str(id))
@@ -175,6 +142,20 @@ class TvpPlugin(Plugin):
             if n > 0:
                 self.refresh(call(self.listing, n))
 
+    def menu_entry(self, *, entry, kdir, index_path):
+        if entry.id:
+            # data = self._get_object(entry.id)
+            # self._item(kdir, data)
+            return kdir.menu(entry.title, call(self.listing, entry.id))
+
+    def menu_entry_iter(self, *, entry):
+        for it in self._get_items(entry.id):
+            if not entry.type or it.get('object_type') == entry.type:
+                yield it
+
+    def menu_entry_item(self, *, kdir, entry, item, index_path):
+        return self._item(kdir, item)
+
     def listing(self, id: PathArg[int], type=None):
         """Use api.v3.tvp.pl JSON listing."""
         with self.directory() as kdir:
@@ -182,13 +163,15 @@ class TvpPlugin(Plugin):
             # data = self.site.jget(None, params={'count': self.limit, 'parent_id': id})
             data = self._get(id)
             items = data.get('items') or ()
-            if items:
-                parents = items[0]['parents'][1:]
-                if parents:
-                    kdir.menu('^^^', call(self.listing, id=parents[0]))  # XXX DEBUG
+            # if items:
+            #     parents = items[0]['parents'][1:]
+            #     if parents:
+            #         kdir.menu('^^^', call(self.listing, id=parents[0]))  # XXX DEBUG
             if len(items) == 1 and items[0].get('object_type') == 'directory_video' and items[0]['title'] == 'wideo':
                 # Oszukany katalog sezonu, pokaż id razu odcinki.
-                data = self.site.jget(None, params={'direct': True, 'count': self.limit, 'parent_id': items[0]['asset_id']})
+                data = self.site.jget(None, params={'direct': True,
+                                                    'count': self.limit,
+                                                    'parent_id': items[0]['asset_id']})
                 items = data.get('items') or ()
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
@@ -223,6 +206,9 @@ class TvpPlugin(Plugin):
                     if end < now:
                         continue  # skip past tranmison
                 self._item(kdir, item)
+
+    def _get_object(self, id):
+        return self.site.jget(f'/shared/details.php?dump=json&object_id={id}')
 
     def _get(self, id):
         return self.site.jget(None, params={'direct': True, 'count': self.limit, 'parent_id': id})
@@ -268,23 +254,26 @@ class TvpPlugin(Plugin):
         if 'commentator' in item:
             descr += '\n\n[B]Komentarz[/B]\n' + item['commentator']
         # item
+        position = 'top' if itype == 'directory_toplist' else None
         if itype in ('video', 'epg_item'):
-            if 'video_id' in item:
+            if 'virtual_channel_id' in item:
+                iid = item['virtual_channel_id']
+            elif 'video_id' in item:
                 iid = item['video_id']
             # kwargs = {}
             # if start:
             #     kwargs['start_date'] = start.timestamp()
             # if end:
             #     kwargs['end_date'] = end.timestamp()
-            kdir.play(title, call(self.video, id=iid), image=image, descr=descr, custom=custom,
+            kdir.play(title, call(self.video, id=iid), image=image, descr=descr, custom=custom, position=position,
                       menu=[(f'ID {iid}', self.refresh)])
         else:
-            kdir.menu(title, call(self.listing, id=iid), image=image, descr=descr, custom=custom)
+            kdir.menu(title, call(self.listing, id=iid), image=image, descr=descr, custom=custom, position=position)
 
     def video(self, id: PathArg[int], *, start_date=None, end_date=None):
         """Play video – PlayTVPInfo by mtr81."""
         # TODO: cleanup
-        data = self.site.jget(f'/shared/details.php?dump=json&object_id={id}')
+        data = self._get_object(id)
         start = data.get('release_date_long', data.get('broadcast_start_long', 0))
         end = data.get('broadcast_end_date_long', 0)
         if start:
