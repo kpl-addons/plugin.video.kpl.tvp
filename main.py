@@ -5,6 +5,7 @@ from libka.logs import log
 from libka.url import URL
 from libka.path import Path
 from libka.menu import Menu, MenuItems
+from libka.utils import html_json
 from pdom import select as dom_select
 import json
 from collections import namedtuple
@@ -61,11 +62,16 @@ def linkid(url):
 
 def image_link(image):
     """Return URL to image by its JSON item."""
+    log(f'III {image!r}')
+    width = image.get('width', 1280)
+    height = image.get('height', 720)
+    if 'url' in image:
+        url = image['url']
+        return URL(url.format(width=width, height=height))
     if 'file_name' not in image:
         return None
     fname: str = image['file_name']
     name, _, ext = fname.rpartition('.')
-    width = image.get('width', 1280)
     return URL(f'http://s.v3.tvp.pl/images/{name[:1]}/{name[1:2]}/{name[2:3]}/uid_{name}_width_{width}_gs_0.{ext}')
 
 
@@ -101,7 +107,11 @@ class TvpPlugin(Plugin):
     """tvp.pl plugin."""
 
     MENU = Menu(order_key='title', items=[
-        Menu(call='tv'),
+        # Menu(title="m1992's TV", id=51689477),
+        Menu(title="m1992's TV", id=68970),
+        Menu(call='tv_hbb'),
+        Menu(call='tv_stations'),
+        Menu(call='tv_html'),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         Menu(title='Sport', items=[
             Menu(title='Submenu test', items=[
@@ -117,10 +127,12 @@ class TvpPlugin(Plugin):
         Menu(call='search'),
     ])
 
+    epg_url = 'http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25'
+
     def __init__(self):
         super().__init__()
-        # self.vod = Site(base='https://vod.tvp.pl')
-        self.site = Site(base='http://www.api.v3.tvp.pl/shared/listing.php?dump=json')
+        self.site = Site(base='https://www.api.v3.tvp.pl/shared/listing.php?dump=json')
+        self.site.verify_ssl = False
         self.limit = 1000
 
     def home(self):
@@ -185,6 +197,30 @@ class TvpPlugin(Plugin):
             for ch in self.channel_iter():
                 kdir.menu(ch.name, self.tv, image=ch.img)
 
+    @entry(title=L('TV (HBB)'))
+    def tv_hbb(self):
+        """TV channel list."""
+        with self.directory() as kdir:
+            for ch in self.channel_iter():
+                kdir.menu(ch.name, self.tv, image=ch.img)
+
+    @entry(title=L('TV (tv-stations)'))
+    def tv_stations(self):
+        """TV channel list."""
+        with self.directory() as kdir:
+            for item in self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations')['data']:
+                img = item['image_square']['url'].format(**item['image_square'])
+                kdir.menu(item['name'], image=img)
+
+    @entry(title=L('TV (html)'))
+    def tv_html(self):
+        """TV channel list."""
+        with self.directory() as kdir:
+            html = self.site.txtget('https://www.tvp.pl/program-tv')
+            for item in html_json(html, 'window.__stations', strict=False):
+                img = item['logo_src']
+                kdir.menu(item['name'], image=img)
+
     def sport(self, id=13010508):
         """Sport transmistion (13010508)."""
         data = self.site.jget(None, params={
@@ -221,7 +257,7 @@ class TvpPlugin(Plugin):
         itype = item.get('object_type')
         iid = item.get('asset_id')
         # format title
-        title = item['title']
+        title = item.get('title', item.get('name', f'#{iid}'))
         if item.get('website_title'):
             title = f'{item["website_title"]}: {title}'
         elif item.get('title_root'):
@@ -255,20 +291,16 @@ class TvpPlugin(Plugin):
             descr += '\n\n[B]Komentarz[/B]\n' + item['commentator']
         # item
         position = 'top' if itype == 'directory_toplist' else None
+        kwargs = dict(image=image, descr=descr, custom=custom, position=position)
         if itype in ('video', 'epg_item'):
-            if 'virtual_channel_id' in item:
-                iid = item['virtual_channel_id']
-            elif 'video_id' in item:
+            # if 'virtual_channel_id' in item:
+            #     iid = item['virtual_channel_id']
+            # elif
+            if 'video_id' in item:
                 iid = item['video_id']
-            # kwargs = {}
-            # if start:
-            #     kwargs['start_date'] = start.timestamp()
-            # if end:
-            #     kwargs['end_date'] = end.timestamp()
-            kdir.play(title, call(self.video, id=iid), image=image, descr=descr, custom=custom, position=position,
-                      menu=[(f'ID {iid}', self.refresh)])
+            kdir.play(title, call(self.video, id=iid), menu=[(f'ID {iid}', self.refresh)], **kwargs)
         else:
-            kdir.menu(title, call(self.listing, id=iid), image=image, descr=descr, custom=custom, position=position)
+            kdir.menu(title, call(self.listing, id=iid), **kwargs)
 
     def video(self, id: PathArg[int], *, start_date=None, end_date=None):
         """Play video – PlayTVPInfo by mtr81."""
@@ -428,6 +460,9 @@ class TvpPlugin(Plugin):
                 subt.append(path / f'subt_{n+1:02d}.ssa')
         return subt
 
+    def all_tv(self):
+        ...
+
     def channel_iter(self):
         """JSON-live channel list."""
         query = {
@@ -458,7 +493,7 @@ query {
 }
 ''',
         }
-        eee = {
+        eee_should_be_removed = {
             "operationName": None,
             "variables": {
                 "stationCode": '',
@@ -472,9 +507,10 @@ query {
         }
         data = self.site.jpost('https://hbb-prod.tvp.pl/apps/manager/api/hub/graphql', json=query)
         log(f'data\n{data!r}')
+        re_name = re.compile(r'^(?:EPG)?\s*([^\d]+?)\s*(\d.*)?\s*$')
         for ch in data['data']['getStationsForMainpage']['items']:
             code = ch['code']
-            name = ch['name']
+            name = ' '.join(s for s in re_name.search(ch['name']).groups() if s)
             imgdata = ch['image_square']
             width, height = imgdata['width'], imgdata['height']
             if not code:
