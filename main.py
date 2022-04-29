@@ -115,6 +115,7 @@ class TvpPlugin(Plugin):
         Menu(call='tv_hbb'),
         Menu(call='tv_stations'),
         Menu(call='tv_html'),
+        Menu(call='tv_tree'),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         Menu(title='Sport', items=[
             Menu(title='Submenu test', items=[
@@ -205,8 +206,12 @@ class TvpPlugin(Plugin):
         """TV channel list."""
         with self.directory() as kdir:
             for ch in self.channel_iter():
-                kdir.play(f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]', call(self.play_tvp_stream, ch.code),
-                          image=ch.img)
+                title = f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]'
+                if ch.code:
+                    kdir.play(title, call(self.play_tvp_stream, ch.code), image=ch.img)
+                else:
+                    title += f' [COLOR gray]{ch.id}[/COLOR]'
+                    kdir.play(title, call(self.video, ch.id), image=ch.img)
 
     @entry(title=L('TV (tv-stations)'))
     def tv_stations(self):
@@ -233,6 +238,26 @@ class TvpPlugin(Plugin):
                     extra += ' P'
                 img = item['logo_src']
                 kdir.play(f'{name} [COLOR gray][{code}][/COLOR]{extra}', call(self.play_tvp_stream, code), image=img)
+
+    @entry(title=L('TV (drzewo)'))
+    def tv_tree(self):
+        live, to_get = [], [68970]
+        while to_get:
+            log(f'tv_tree({to_get})...')
+            with self.site.concurrent() as con:
+                for pid in to_get:
+                    con[...].jget(None, params={'direct': True, 'count': '', 'parent_id': pid})
+            to_get = []
+            for data in con:
+                for item in data.get('items') or ():
+                    if item['object_type'] in ('video', 'epg_item'):
+                        if item.get('playable'):
+                            live.append(item)
+                    elif 'asset_id' in item:
+                        to_get.append(item['asset_id'])
+        with self.directory() as kdir:
+            for item in live:
+                self._item(kdir, item)
 
     def play_tvp_stream(self, code):
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
@@ -335,10 +360,19 @@ class TvpPlugin(Plugin):
         else:
             kdir.menu(title, call(self.listing, id=iid), **kwargs)
 
-    def video(self, id: PathArg[int], *, start_date=None, end_date=None):
+    def video(self, id: PathArg[int]):
         """Play video – PlayTVPInfo by mtr81."""
         # TODO: cleanup
         data = self._get_object(id)
+        if data.get('type') == 'virtual_channel' and 'live_video_id' in data:
+            id = data['live_video_id']
+        # 'type': 'virtual_channel',
+        # 'object_type': 'virtual_channel',
+        # 'parents': [38533322, 38345166, 38345015, 2],
+        # 'signature': 'TVP3 Wrocław',
+        # 'title': 'EPG - TVP Wroc',
+        # 'vortal_id': 38533322,
+        # 'live_video_id': 50841981,
         start = data.get('release_date_long', data.get('broadcast_start_long', 0))
         end = data.get('broadcast_end_date_long', 0)
         if start:
@@ -540,7 +574,7 @@ query {
         }
         data = self.site.jpost('https://hbb-prod.tvp.pl/apps/manager/api/hub/graphql', json=query)
         log(f'data\n{data!r}')
-        re_name = re.compile(r'^(?:EPG)?\s*([^\d]+?)\s*(\d.*)?\s*$')
+        re_name = re.compile(r'^(?:EPG(?:\s*-\s*)?)?\s*([^\d]+?)\s*(\d.*)?\s*$')
         for ch in data['data']['getStationsForMainpage']['items']:
             code = ch['code']
             name = ' '.join(s for s in re_name.search(ch['name']).groups() if s)
