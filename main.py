@@ -5,7 +5,7 @@ from libka.logs import log
 from libka.url import URL
 from libka.path import Path
 from libka.menu import Menu, MenuItems
-from libka.utils import html_json
+from libka.utils import html_json, html_json_iter
 from pdom import select as dom_select
 import json
 from collections import namedtuple
@@ -74,6 +74,9 @@ def image_link(image):
     name, _, ext = fname.rpartition('.')
     return URL(f'http://s.v3.tvp.pl/images/{name[:1]}/{name[1:2]}/{name[2:3]}/uid_{name}_width_{width}_gs_0.{ext}')
 
+
+StreamType = namedtuple('StreamType', 'proto mime')
+Stream = namedtuple('Stream', 'url proto mime')
 
 ChannelInfo = namedtuple('ChannelInfo', 'code name img id')
 
@@ -202,7 +205,8 @@ class TvpPlugin(Plugin):
         """TV channel list."""
         with self.directory() as kdir:
             for ch in self.channel_iter():
-                kdir.menu(ch.name, self.tv, image=ch.img)
+                kdir.play(f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]', call(self.play_tvp_stream, ch.code),
+                          image=ch.img)
 
     @entry(title=L('TV (tv-stations)'))
     def tv_stations(self):
@@ -210,16 +214,45 @@ class TvpPlugin(Plugin):
         with self.directory() as kdir:
             for item in self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations')['data']:
                 img = item['image_square']['url'].format(**item['image_square'])
-                kdir.menu(item['name'], image=img)
+                name, code = item['name'], item.get('code', '')
+                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]', call(self.play_tvp_stream, code), image=img)
 
     @entry(title=L('TV (html)'))
     def tv_html(self):
         """TV channel list."""
         with self.directory() as kdir:
             html = self.site.txtget('https://www.tvp.pl/program-tv')
-            for item in html_json(html, 'window.__stations', strict=False):
+            stations = html_json(html, 'window.__stations', strict=False)
+            programs = list(html_json_iter(html, r'window.__stationsProgram\[\d+\]', strict=False))
+            for item in html_json(html, 'window.__stationsData', strict=False).values():
+                name, code = item['name'], item.get('code', '')
+                extra = ''
+                if any(it['code'] == code for it in stations):
+                    extra += ' S'
+                if any(it['station']['code'] == code for it in programs):
+                    extra += ' P'
                 img = item['logo_src']
-                kdir.menu(item['name'], image=img)
+                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]{extra}', call(self.play_tvp_stream, code), image=img)
+
+    def play_tvp_stream(self, code):
+        data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
+                              params={'station_code': code}).get('data')
+        if data:
+            stream = self.get_stream_of_type(self.site.jget(data['stream_url']).get('formats') or ())
+            self._play(stream)
+
+    def _play(self, stream):
+        from inputstreamhelper import Helper
+        is_helper = Helper(stream.proto)
+        if is_helper.check_inputstream():
+            play_item = xbmcgui.ListItem(path=stream.url)
+            if stream.mime is not None:
+                play_item.setMimeType(stream.mime)
+            play_item.setContentLookup(False)
+            play_item.setProperty('inputstream', is_helper.inputstream_addon)
+            play_item.setProperty("IsPlayable", "true")
+            play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
+            xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
 
     def sport(self, id=13010508):
         """Sport transmistion (13010508)."""
@@ -523,6 +556,28 @@ query {
                     width = height = 140
             img = imgdata['url'].format(width=width, height=height)
             yield ChannelInfo(code, name, img, ch_id)
+
+    @staticmethod
+    def get_stream_of_type(streams):
+        mime_types = {
+            'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
+            'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
+            'video/mp2t':            StreamType('hls', 'application/x-mpegURL'),
+            'application/dash+xml':  StreamType('mpd', 'application/xml+dash'),
+            'application/x-mpegurl': StreamType('hls', 'application/x-mpegURL'),
+        }
+
+        for st in streams:
+            for prio, mime in enumerate(mime_types):
+                if st['mimeType'] == mime:
+                    st['priority'] = prio
+
+        streams = sorted(streams, key=lambda d: (-int(d['totalBitrate']), d['priority']), reverse=True)
+        for st in streams:
+            if 'material_niedostepny' not in st['url']:
+                for mime, stype in mime_types.items():
+                    if st['mimeType'] == mime:
+                        return Stream(url=st['url'], proto=stype.proto, mime=stype.mime)
 
 
 # DEBUG ONLY
