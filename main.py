@@ -6,6 +6,7 @@ from libka.url import URL
 from libka.path import Path
 from libka.menu import Menu, MenuItems
 from libka.utils import html_json, html_json_iter
+from libka.format import safefmt
 from pdom import select as dom_select
 import json
 from collections import namedtuple
@@ -111,6 +112,7 @@ class TvpPlugin(Plugin):
 
     MENU = Menu(order_key='title', items=[
         # Menu(title="m1992's TV", id=51689477),
+        Menu(call='tv'),
         Menu(title="m1992's TV", id=68970),
         Menu(call='tv_hbb'),
         Menu(call='tv_stations'),
@@ -241,12 +243,15 @@ class TvpPlugin(Plugin):
 
     @entry(title=L('TV (drzewo)'))
     def tv_tree(self):
+        # recurse scan tree
         live, to_get = [], [68970]
+        # filter_data = json.dumps({"playable": True})
         while to_get:
             log(f'tv_tree({to_get})...')
             with self.site.concurrent() as con:
                 for pid in to_get:
-                    con[...].jget(None, params={'direct': True, 'count': '', 'parent_id': pid})
+                    # con.jget(None, params={'direct': True, 'count': '', 'parent_id': pid, 'filter': filter_data})
+                    con.jget(None, params={'direct': True, 'count': '', 'parent_id': pid})
             to_get = []
             for data in con:
                 for item in data.get('items') or ():
@@ -255,9 +260,40 @@ class TvpPlugin(Plugin):
                             live.append(item)
                     elif 'asset_id' in item:
                         to_get.append(item['asset_id'])
-        with self.directory() as kdir:
-            for item in live:
-                self._item(kdir, item)
+        # combine the same channels
+        retitle = re.compile(r'^(?:\d+\s*)?(?:(TVP)\s*3\b)?(.*?)(?:\s+hd)?(?:\s*\(?(?:hbbtv|hbb)\)?)?\s*$',
+                             re.IGNORECASE)
+        tv, to_get = {}, []
+        for item in live:
+            # log(safefmt(('TV(tree): id={asset_id!r}, vid={video_id!r}, live={live_video_id!r}, playable={playable!r},'
+            #              ' video_format={video_format_len}, videoFormatMimes={videoFormatMimes_len}, title={title!r}'),
+            #             video_format_len=len(item.get('video_format', [])),
+            #             videoFormatMimes_len=len(item.get('videoFormatMimes', [])), **item))
+            title = retitle.sub(r'\1\2', item['title'].replace('Wlkp.', 'Wielkopolski'))
+            if 'live_video_id' in item:
+                to_get.append(item['asset_id'])
+            tv.setdefault(title, []).append(item)
+        # receive video formats pointed by 'live_video_id', extend 'videoFormatMimes'
+        with self.site.concurrent() as con:
+            for vid in to_get:
+                con.a[vid].jget(f'/shared/details.php?dump=json&object_id={vid}')
+        videos = dict(con.a)
+        for items in tv.values():
+            for item in items:
+                if 'live_video_id' in item:
+                    item.setdefault('videoFormatMimes', []).extend(videos.get('videoFormatMimes', []))
+        # filter out if no 'video_format'
+        tv = {title: [item for item in items if item.get('videoFormatMimes')] for title, items in tv.items()}
+        tv = {title: items for title, items in tv.items() if items}
+        # build kodi directory list
+        with self.directory(isort='label') as kdir:
+            for title, items in tv.items():
+                title += f" : [COLOR yellow]{','.join(str(it['asset_id']) for it in items)}[/COLOR]"
+                self._item(kdir, items[0], title=title)
+                log(title)
+
+    def play_hbb(self, id: PathArg, code: PathArg = ''):
+        ...
 
     def play_tvp_stream(self, code):
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
@@ -311,15 +347,16 @@ class TvpPlugin(Plugin):
         for it in self._get(id).get('items') or ():
             yield it
 
-    def _item(self, kdir, item, *, custom=None):
+    def _item(self, kdir, item, *, custom=None, title=None):
         itype = item.get('object_type')
         iid = item.get('asset_id')
         # format title
-        title = item.get('title', item.get('name', f'#{iid}'))
-        if item.get('website_title'):
-            title = f'{item["website_title"]}: {title}'
-        elif item.get('title_root'):
-            title = item['title_root']
+        if title is None:
+            title = item.get('title', item.get('name', f'#{iid}'))
+            if item.get('website_title'):
+                title = f'{item["website_title"]}: {title}'
+            elif item.get('title_root'):
+                title = item['title_root']
         if title[:1].islower():
             title = title[0].upper() + title[1:]
         title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
@@ -530,8 +567,8 @@ class TvpPlugin(Plugin):
     def all_tv(self):
         ...
 
-    def channel_iter(self):
-        """JSON-live channel list."""
+    def hbb_api(self, query):
+        """Request query and returns JSON."""
         query = {
             "operationName": None,
             "variables": {
@@ -543,36 +580,27 @@ class TvpPlugin(Plugin):
             #         "sha256Hash": "5c29325c442c94a4004432d70f94e336b8c258801fe16946875a873e818c8aca",
             #     },
             # },
-            "query": '''
-query {
-    getStationsForMainpage {
-        items {
-            id
-            name
-            code
-            image_square {
-                url
-                width
-                height
-            }
+            "query": query,
         }
-    }
-}
-''',
-        }
-        eee_should_be_removed = {
-            "operationName": None,
-            "variables": {
-                "stationCode": '',
-                "extensions": {
-                    "persistedQuery": {
-                        "version": 1,
-                        "sha256Hash": "0b9649840619e548b01c33ae4bba6027f86eac5c48279adc04e9ac2533781e6b",
-                    },
-                },
-            }
-        }
-        data = self.site.jpost('https://hbb-prod.tvp.pl/apps/manager/api/hub/graphql', json=query)
+        return self.site.jpost('https://hbb-prod.tvp.pl/apps/manager/api/hub/graphql', json=query)
+
+    def channel_iter(self):
+        """JSON-live channel list."""
+        data = self.hbb_api('''
+            query {
+                getStationsForMainpage {
+                    items {
+                        id
+                        name
+                        code
+                        image_square {
+                            url
+                            width
+                            height
+                        }
+                    }
+                }
+            }''')
         log(f'data\n{data!r}')
         re_name = re.compile(r'^(?:EPG(?:\s*-\s*)?)?\s*([^\d]+?)\s*(\d.*)?\s*$')
         for ch in data['data']['getStationsForMainpage']['items']:
