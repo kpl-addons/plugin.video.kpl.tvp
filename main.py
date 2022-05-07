@@ -35,6 +35,9 @@ except ModuleNotFoundError:
 # TVP INFO - https://www.tvp.info/nasze-programy
 
 
+UNLIMITED = object()
+
+
 def remove_tags(text):
     def sub(match):
         tag = remove_tags.replace.get(match.group('tag'))
@@ -64,7 +67,6 @@ def linkid(url):
 
 def image_link(image):
     """Return URL to image by its JSON item."""
-    log(f'III {image!r}')
     width = image.get('width', 1280)
     height = image.get('height', 720)
     if 'url' in image:
@@ -108,6 +110,43 @@ class TvpVodSite(Site):
     """vod.tvp.pl site."""
 
 
+class TvpSite(Site):
+    """TVP API."""
+
+    def __init__(self, base='https://www.api.v3.tvp.pl/', *args, count=None, verify_ssl=False, **kwargs):
+        super().__init__(base, *args, verify_ssl=verify_ssl, **kwargs)
+        self.count = count
+
+    def listing(self, parent_id, *, dump='json', direct=True, **kwargs):
+        count = kwargs.pop('count', self.count)
+        if count is None or count is UNLIMITED:
+            count = ''
+        return self.jget('/shared/listing.php',
+                         params={'dump': dump, 'direct': direct, 'count': count, 'parent_id': parent_id, **kwargs})
+
+    def listing_items(self, parent_id, *, dump='json', direct=True, **kwargs):
+        data = self.listing(parent_id, dump=dump, direct=direct, **kwargs)
+        for item in data.get('items') or ():
+            yield item
+
+    # Dicts `filter` and `order` could be in arguments because they are read-only.
+    def transmissions(self, parent_id, dump='json', direct=False, type='epg_item',
+                      filter={'is_live': True}, order={'release_date_long': -1}, **kwargs):
+        return self.listing(parent_id, dump=dump, direct=direct, type=type, filter=filter, order=order, **kwargs)
+
+    # Dicts `filter` and `order` could be in arguments because they are read-only.
+    def transmissions_items(self, parent_id, dump='json', direct=False, type='epg_item',
+                            filter={'is_live': True}, order={'release_date_long': -1}, **kwargs):
+        data = self.transmissions(parent_id, dump=dump, direct=direct, type=type, filter=filter, order=order, **kwargs)
+        # reverse reversed ('release_date_long': -1) list
+        for item in reversed(data.get('items') or ()):
+            yield item
+
+    def details(self, object_id, *, dump='json', **kwargs):
+        return self.jget('/shared/details.php',
+                         params={'dump': dump, 'object_id': object_id, **kwargs})
+
+
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
 
@@ -124,6 +163,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(call='tv'),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
+        Menu(title='Rekonstrucja cyfrowa', id=35470692),
         Menu(title='Sport', items=[
             Menu(title='Submenu test', items=[
                 Menu(title='Transmisje', call='sport'),
@@ -135,7 +175,7 @@ class TvpPlugin(Plugin):
             Menu(title='Wideo', id=432801),
         ]),
         Menu(title='Parlament', items=[
-            Menu(call='parlament_live'),
+            Menu(title='Transmisje', call=call('transmissions', 4422078)),
             Menu(title='Retransmisje', id=4433578),
             Menu(title='Programy EuroparlTV', id=4615555),
         ]),
@@ -147,9 +187,7 @@ class TvpPlugin(Plugin):
 
     def __init__(self):
         super().__init__()
-        self.site = Site(base='https://www.api.v3.tvp.pl/shared/listing.php?dump=json')
-        self.site.verify_ssl = False
-        self.limit = 1000
+        self.site = TvpSite()
 
     def home(self):
         self.menu()
@@ -176,7 +214,7 @@ class TvpPlugin(Plugin):
             return kdir.menu(entry.title, call(self.listing, entry.id))
 
     def menu_entry_iter(self, *, entry):
-        for it in self._get_items(entry.id):
+        for it in self.site.listing_items(entry.id):
             if not entry.type or it.get('object_type') == entry.type:
                 yield it
 
@@ -188,7 +226,7 @@ class TvpPlugin(Plugin):
         with self.directory() as kdir:
             kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
             # data = self.site.jget(None, params={'count': self.limit, 'parent_id': id})
-            data = self._get(id)
+            data = self.site.listing(id)
             items = data.get('items') or ()
             # if items:
             #     parents = items[0]['parents'][1:]
@@ -196,14 +234,56 @@ class TvpPlugin(Plugin):
             #         kdir.menu('^^^', call(self.listing, id=parents[0]))  # XXX DEBUG
             if len(items) == 1 and items[0].get('object_type') == 'directory_video' and items[0]['title'] == 'wideo':
                 # Oszukany katalog sezonu, pokaż id razu odcinki.
-                data = self.site.jget(None, params={'direct': True,
-                                                    'count': self.limit,
-                                                    'parent_id': items[0]['asset_id']})
+                data = self.site.listing(items[0]['asset_id'])
                 items = data.get('items') or ()
+
+            # Analiza szcegółów, w tym dokładnych opisów i danych video
+            has_extra = False
+            with self.site.concurrent() as con:
+                for item in items:
+                    if 'asset_id' in item and item.get('object_type') == 'website':
+                        iid = item['asset_id']
+                        con.a[iid].details(iid)
+            for item in items:
+                iid = item.get('asset_id')
+                if iid in con.a:
+                    item['DETAILS'] = con.a[iid]
+                    has_extra = True
+            # Analiza video dostępnych pośrednio przez powyższe `DETAILS`
+            if has_extra:
+                with self.site.concurrent() as con:
+                    for item in items:
+                        try:
+                            iid = item['asset_id']
+                            if item.get('DETAILS', {}).get('directory_video'):
+                                vid = item['DETAILS']['directory_video'][0]['_id']
+                                con.a[iid].listing(vid)
+                                item['VIDEO_DIRECTORY'] = vid
+                        except (KeyError, IndexError):
+                            pass
+                for item in items:
+                    iid = item.get('asset_id')
+                    if iid in con.a:
+                        item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
+                                          if it.get('object_type') == 'video' and it.get('playable')]
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
             for item in items:
                 self._item(kdir, item, debug=True)
+
+    # XXX  Jeszcze nieużywane
+    EXTRA_TV = [
+        53795158,  # TVP Kobieta
+        53415775,  # Jasna Góra
+        55643356,  # Kamera H
+        16047094,  # Senat
+        51696824,  # TVP Polonia
+        56337313,  # TVP Polonia 2
+        55989844,  # TVP Polonia OBS
+        50930885,  # TVP Polonia OBS
+        51696827,  # TVP Sport
+        51696825,  # TVP Rozrywka
+    ]
 
     @entry(title=L('TV'))
     def tv(self):
@@ -263,7 +343,7 @@ class TvpPlugin(Plugin):
             with self.site.concurrent() as con:
                 for pid in to_get:
                     # con.jget(None, params={'direct': True, 'count': '', 'parent_id': pid, 'filter': filter_data})
-                    con.jget(None, params={'direct': True, 'count': '', 'parent_id': pid})
+                    con.listing(pid, count=UNLIMITED)
             to_get = []
             for data in con:
                 for item in data.get('items') or ():
@@ -288,7 +368,7 @@ class TvpPlugin(Plugin):
         # receive video formats pointed by 'live_video_id', extend 'videoFormatMimes'
         with self.site.concurrent() as con:
             for vid in to_get:
-                con.a[vid].jget(f'/shared/details.php?dump=json&object_id={vid}')
+                con.a[vid].details(vid)
         videos = dict(con.a)
         for items in tv.values():
             for item in items:
@@ -305,29 +385,9 @@ class TvpPlugin(Plugin):
                 log(title)
 
     # @entry(title=L('Live'), path='parlament/live')
-    @entry(title=L('Live'))
-    def parlament_live(self, id=None):
-        if id is None:
-            id = 4422078
-        params = {
-            'parent_id': id,
-            'direct': False,
-            'type': 'epg_item',
-            'filter': {'is_live': True},
-            'order': {'release_date_long': -1},
-            'count': self.limit,
-        }
-        now = datetime.utcnow()
-        data = self.site.jget(None, params=params)
-        with self.directory() as kdir:
-            # Reverse reversed order - get from current to future.
-            for item in reversed(data.get('items') or ()):
-                # Only current and future
-                end = item.get('broadcast_end_date_long', 0)
-                if end:
-                    end = datetime.utcfromtimestamp(end / 1000)
-                    if end > now:
-                        self._item(kdir, item)
+    # @entry(title=L('Live'))
+    # def parlament_live(self, id=4422078):
+    #     self.transmissions(id)
 
     def play_hbb(self, id: PathArg, code: PathArg = ''):
         ...
@@ -352,20 +412,12 @@ class TvpPlugin(Plugin):
             play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
             xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
 
-    def sport(self, id=13010508):
-        """Sport transmistion (13010508)."""
-        data = self.site.jget(None, params={
-            'direct': False,
-            'count': self.limit,
-            'parent_id': id,
-            'type': 'epg_item',
-            'filter': {'is_live': True},
-            'order': {'release_date_long': -1},  # reversed order - get future
-        })
+    def transmissions(self, id: PathArg):
+        """Live transmistions (sport: 13010508, parlament: 4422078)."""
         now = datetime.utcnow()
         with self.directory() as kdir:
             # Reverse reversed order - get from current to future.
-            for item in reversed(data.get('items') or ()):
+            for item in self.site.transmissions_items(id):
                 # Only current and future
                 end = item.get('broadcast_end_date_long', 0)
                 if end:
@@ -374,15 +426,9 @@ class TvpPlugin(Plugin):
                         continue  # skip past tranmison
                 self._item(kdir, item)
 
-    def _get_object(self, id):
-        return self.site.jget(f'/shared/details.php?dump=json&object_id={id}')
-
-    def _get(self, id):
-        return self.site.jget(None, params={'direct': True, 'count': self.limit, 'parent_id': id})
-
-    def _get_items(self, id):
-        for it in self._get(id).get('items') or ():
-            yield it
+    def sport(self, id=13010508):
+        """Sport transmistion (13010508)."""
+        self.transmissions(id)
 
     def _item_image(self, item, *, preferred=None):
         if preferred is None:
@@ -399,9 +445,11 @@ class TvpPlugin(Plugin):
                 if image:
                     return image
 
-    def _item(self, kdir, item, *, custom=None, title=None, debug=False):
+    def _item(self, kdir, item, *, custom=None, title=None, debug=True):
         itype = item.get('object_type')
         iid = item.get('asset_id')
+        playable = item.get('playlable')
+        details = item.get('DETAILS', {})
         # format title
         if title is None:
             title = item.get('title', item.get('name', f'#{iid}'))
@@ -425,24 +473,28 @@ class TvpPlugin(Plugin):
         image = self._item_image(item)
         # description
         descr = item.get('lead_root') or item.get('description_root')
-        descr = remove_tags(descr)
         if 'commentator' in item:
             descr += '\n\n[B]Komentarz[/B]\n' + item['commentator']
+        for cue in details.get('cue_card') or ():
+            for par in cue.get('text_paragraph_standard') or ():
+                descr += '[CR]{}'.format(par.get('text', '').replace(r'\n', '[CR]'))
+        descr = remove_tags(descr)
         # menu
         menu = []
         # raise KeyError('a')
         if debug:
             menu.append((f'ID {iid}', self.refresh))
-            menu.append((f'Playlable {item.get("playable")}', self.refresh))
+            menu.append((f'Playlable {playable}', self.refresh))
             for pid in item.get('parents', ()):
                 # menu.append((f'Parent {pid}', call(self.refresh, call(self.listing, id=pid))))
                 menu.append((f'Parent {pid}', call(self.listing, id=pid)))
-            for attr in ('video_id', 'virtual_channel', 'live_video_id', 'vortal_id'):
+            attrs = ('video_id', 'virtual_channel_id', 'live_video_id', 'vortal_id')
+            for attr in attrs:
                 if attr in item:
                     menu.append((f'Go {attr} {item[attr]}', call(self.listing, id=item[attr])))
-            for attr in ('video_id', 'virtual_channel', 'live_video_id', 'vortal_id'):
-                if attr in item:
-                    menu.append((f'Play {attr} {item[attr]}', call(self.video, id=item[attr])))
+            # for attr in attrs:
+            #     if attr in item:
+            #         menu.append((f'Play {attr} {item[attr]}', call(self.video, id=item[attr])))
         # item
         position = 'top' if itype == 'directory_toplist' else None
         kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu)
@@ -454,12 +506,20 @@ class TvpPlugin(Plugin):
                 iid = item['video_id']
             kdir.play(title, call(self.video, id=iid), **kwargs)
         else:
+            if item.get('VIDEOS'):
+                if len(item['VIDEOS']) == 1:
+                    vid = item['VIDEOS'][0]
+                    kdir.play(title, call(self.video, id=vid), **kwargs)
+                    return
+                iid = item.get('VIDEO_DIRECTORY', iid)
             kdir.menu(title, call(self.listing, id=iid), **kwargs)
 
     def video(self, id: PathArg[int]):
         """Play video – PlayTVPInfo by mtr81."""
         # TODO: cleanup
-        data = self._get_object(id)
+        data = self.site.details(id)
+        log(f"Video: {id}, type={data.get('type')}, live_video_id={data.get('live_video_id')},"
+            f" video_id={data.get('video_id')}", title='TVP')
         if data.get('type') == 'virtual_channel' and 'live_video_id' in data:
             id = data['live_video_id']
         # 'type': 'virtual_channel',
@@ -483,12 +543,15 @@ class TvpPlugin(Plugin):
                     end = now + timedelta(days=1)
             # if not start < now < end:  # sport only current
             if start > now:  # future
-                xbmcgui.Dialog().notification('TVP', 'Transmisja niedstępna teraz', xbmcgui.NOTIFICATION_INFO)
+                xbmcgui.Dialog().notification('TVP', 'Transmisja niedostępna teraz', xbmcgui.NOTIFICATION_INFO)
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
+                log(f'Video {id} in future: {start} > {now}', title='TVP')
                 return
 
+        if 'video_id' in data:
+            id = data['video_id']
         site = Site()
-        url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1'
+        url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1&end='
         resp = site.jget(url)
         stream_url = ''
         if resp['payment_type'] != 0 or resp['status'] == 'NOT_FOUND_FOR_PLATFORM':  # ABO
