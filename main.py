@@ -163,7 +163,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(call='tv'),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
-        Menu(title='Rekonstrucja cyfrowa', id=35470692),
+        # Menu(title='Rekonstrucja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
         Menu(title='Sport', items=[
             Menu(title='Submenu test', items=[
                 Menu(title='Transmisje', call='sport'),
@@ -223,10 +223,15 @@ class TvpPlugin(Plugin):
 
     def listing(self, id: PathArg[int], type=None):
         """Use api.v3.tvp.pl JSON listing."""
-        with self.directory() as kdir:
+        # TODO:  determine `view`
+        with self.site.concurrent() as con:
+            con.a.data.listing(id)
+            con.a.details.details(id)
+        data = con.a.data
+        details = con.a.details
+
+        with self.directory(view='movies') as kdir:
             kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
-            # data = self.site.jget(None, params={'count': self.limit, 'parent_id': id})
-            data = self.site.listing(id)
             items = data.get('items') or ()
             # if items:
             #     parents = items[0]['parents'][1:]
@@ -256,9 +261,11 @@ class TvpPlugin(Plugin):
                         try:
                             iid = item['asset_id']
                             if item.get('DETAILS', {}).get('directory_video'):
-                                vid = item['DETAILS']['directory_video'][0]['_id']
-                                con.a[iid].listing(vid)
-                                item['VIDEO_DIRECTORY'] = vid
+                                vdir = item['DETAILS']['directory_video']
+                                if len(vdir) == 1:
+                                    vid = item['DETAILS']['directory_video'][0]['_id']
+                                    con.a[iid].listing(vid)
+                                    item['VIDEO_DIRECTORY'] = vid
                         except (KeyError, IndexError):
                             pass
                 for item in items:
