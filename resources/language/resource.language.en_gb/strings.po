@@ -1,0 +1,57 @@
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: 1.0\n"
+"Report-Msgid-Bugs-To: dev@kodi-pl.net\n"
+"POT-Creation-Date: 2022-05-08 15:55+0200\n"
+"PO-Revision-Date: 2022-05-08 15:55+0200\n"
+"Last-Translator: KodiPL Team <dev@kodi-pl.net>\n"
+"Language: en_GB\n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=utf-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n != 1);\n"
+
+msgctxt "#30101"
+msgid "E-mail"
+msgstr ""
+
+msgctxt "#30102"
+msgid "Password"
+msgstr ""
+
+msgctxt "#30103"
+msgid "Main"
+msgstr ""
+
+msgctxt "#30104"
+msgid "API Tree"
+msgstr ""
+
+msgctxt "#30105"
+msgid "TV"
+msgstr ""
+
+msgctxt "#30106"
+msgid "TV (HBB)"
+msgstr ""
+
+msgctxt "#30107"
+msgid "TV (tv-stations)"
+msgstr ""
+
+msgctxt "#30108"
+msgid "TV (html)"
+msgstr ""
+
+msgctxt "#30109"
+msgid "TV (drzewo)"
+msgstr ""
+
+msgctxt "#30110"
+msgid "Dev Area"
+msgstr ""
+
+msgctxt "#30111"
+msgid "Debugging"
+msgstr ""

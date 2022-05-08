@@ -121,6 +121,8 @@ class TvpSite(Site):
         count = kwargs.pop('count', self.count)
         if count is None or count is UNLIMITED:
             count = ''
+        if kwargs.get('page', ...) is None:
+            kwargs.pop('page')
         return self.jget('/shared/listing.php',
                          params={'dump': dump, 'direct': direct, 'count': count, 'parent_id': parent_id, **kwargs})
 
@@ -151,8 +153,8 @@ class TvpPlugin(Plugin):
     """tvp.pl plugin."""
 
     MENU = Menu(order_key='title', items=[
-        Menu(title='Tests', items=[
-            Menu(title=L('API Tree'), id=2),
+        Menu(title='Tests', when='debugging', items=[
+            Menu(title=L(30104, 'API Tree'), id=2),
             Menu(title='VoD', id=1785454),
             Menu(title='Retransmisje', id=48583081),
             Menu(title="m1992's TV", id=68970),
@@ -181,6 +183,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(title='TVP Info', id=191888),
         Menu(call='search'),
+        # Menu(call='settings'),
     ])
 
     epg_url = 'http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25'
@@ -221,17 +224,24 @@ class TvpPlugin(Plugin):
     def menu_entry_item(self, *, kdir, entry, item, index_path):
         return self._item(kdir, item)
 
-    def listing(self, id: PathArg[int], type=None):
+    def listing(self, id: PathArg[int], page=None, type=None):
         """Use api.v3.tvp.pl JSON listing."""
+        PAGE = 100  # liczba vide na stonę
+        PAGE = None  # wszystko na raz na stronie
+
         # TODO:  determine `view`
         with self.site.concurrent() as con:
-            con.a.data.listing(id)
+            con.a.data.listing(id, count=PAGE, page=page)
             con.a.details.details(id)
         data = con.a.data
         details = con.a.details
+        etype = details.get('object_type')
 
         with self.directory(view='movies') as kdir:
-            kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
+            if page is None:
+                kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
+            else:
+                kdir.item(f'=== {id}, page {page}', call(self.enter_listing, id=id))  # XXX DEBUG
             items = data.get('items') or ()
             # if items:
             #     parents = items[0]['parents'][1:]
@@ -241,6 +251,17 @@ class TvpPlugin(Plugin):
                 # Oszukany katalog sezonu, pokaż id razu odcinki.
                 data = self.site.listing(items[0]['asset_id'])
                 items = data.get('items') or ()
+
+            # ogromne katalogi > 100
+            if PAGE and page is None:
+                if data.get('total_count') and data['total_count'] > PAGE:
+                    count = data['total_count']
+                    for n in range((count + PAGE - 1) % PAGE):
+                        if etype == 'directory_video':
+                            kdir.menu(f'Strona {n+1}', call(self.listing, id=id, page=n+1, type='video'))
+                        else:
+                            kdir.menu(f'Strona {n+1}', call(self.listing, id=id, page=n+1))
+                    return
 
             # Analiza szcegółów, w tym dokładnych opisów i danych video
             has_extra = False
@@ -292,7 +313,7 @@ class TvpPlugin(Plugin):
         51696825,  # TVP Rozrywka
     ]
 
-    @entry(title=L('TV'))
+    @entry(title=L(30105, 'TV'))
     def tv(self):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
@@ -300,9 +321,12 @@ class TvpPlugin(Plugin):
             for item in self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations')['data']:
                 image = self._item_image(item, preferred='image_square')
                 name, code = item['name'], item.get('code', '')
-                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]', call(self.play_tvp_stream, code), image=image)
+                title = name
+                if self.settings.debugging:
+                    title += f' [COLOR gray][{code}][/COLOR]'
+                kdir.play(title, call(self.play_tvp_stream, code), image=image)
 
-    @entry(title=L('TV (HBB)'))
+    @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
         """TV channel list."""
         with self.directory() as kdir:
@@ -314,7 +338,7 @@ class TvpPlugin(Plugin):
                     title += f' [COLOR gray]{ch.id}[/COLOR]'
                     kdir.play(title, call(self.video, ch.id), image=ch.img)
 
-    @entry(title=L('TV (tv-stations)'))
+    @entry(title=L(30107, 'TV (tv-stations)'))
     def tv_stations(self):
         """TV channel list."""
         with self.directory() as kdir:
@@ -323,7 +347,7 @@ class TvpPlugin(Plugin):
                 name, code = item['name'], item.get('code', '')
                 kdir.play(f'{name} [COLOR gray][{code}][/COLOR]', call(self.play_tvp_stream, code), image=image)
 
-    @entry(title=L('TV (html)'))
+    @entry(title=L(30108, 'TV (html)'))
     def tv_html(self):
         """TV channel list."""
         with self.directory() as kdir:
@@ -340,7 +364,7 @@ class TvpPlugin(Plugin):
                 img = item['logo_src']
                 kdir.play(f'{name} [COLOR gray][{code}][/COLOR]{extra}', call(self.play_tvp_stream, code), image=img)
 
-    @entry(title=L('TV (drzewo)'))
+    @entry(title=L(30109, 'TV (drzewo)'))
     def tv_tree(self):
         # recurse scan tree
         live, to_get = [], [68970]
@@ -466,7 +490,8 @@ class TvpPlugin(Plugin):
                 title = item['title_root']
         if title[:1].islower():
             title = title[0].upper() + title[1:]
-        title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
+        if self.settings.debugging:
+            title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
         # broadcast time
         start = item.get('release_date_long', item.get('broadcast_start_long', 0))
         end = item.get('broadcast_end_date_long', 0)
