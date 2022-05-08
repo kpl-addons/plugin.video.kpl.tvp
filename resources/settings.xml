@@ -20,6 +20,7 @@
 					</constraints>
 					<control type="edit" format="string">
 						<heading>30102</heading>
+						<hidden>true</hidden>
 					</control>
 				</setting>
 			</group>
@@ -27,6 +28,11 @@
 		<category id="tvp_devmain" label="30110" help="">
 			<group id="91">
 				<setting id="debugging" label="30111" type="boolean">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle" />
+				</setting>
+				<setting id="api_details" label="30112" type="boolean">
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle" />

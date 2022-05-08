@@ -14,7 +14,7 @@ msgstr ""
 
 msgctxt "#30101"
 msgid "E-mail"
-msgstr ""
+msgstr "E-mail"
 
 msgctxt "#30102"
 msgid "Password"
@@ -55,3 +55,51 @@ msgstr "Strefa dev"
 msgctxt "#30111"
 msgid "Debugging"
 msgstr "Debugowanie"
+
+msgctxt "#30112"
+msgid "Extra details"
+msgstr "Dodatkowe szczegóły"
+
+msgctxt "#30113"
+msgid "VoD"
+msgstr ""
+
+msgctxt "#30114"
+msgid "Rebroadcast"
+msgstr "Retransmisje"
+
+msgctxt "#30115"
+msgid "Archive"
+msgstr "Archiwum"
+
+msgctxt "#30116"
+msgid "Parliament"
+msgstr "Parlament"
+
+msgctxt "#30117"
+msgid "Broadcast"
+msgstr "Transmisje"
+
+msgctxt "#30118"
+msgid "EuroparlTV"
+msgstr "EuroparlTV"
+
+msgctxt "#30119"
+msgid "Sport"
+msgstr "Sport"
+
+msgctxt "#30120"
+msgid "Sport magazines"
+msgstr "Magazyny"
+
+msgctxt "#30121"
+msgid "Video"
+msgstr "Wideo"
+
+msgctxt "#30122"
+msgid "TVP Info"
+msgstr "TVP Info"
+
+msgctxt "#30123"
+msgid "Live TV"
+msgstr "Kanały na żywo"

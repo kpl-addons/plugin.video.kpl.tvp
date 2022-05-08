@@ -55,3 +55,51 @@ msgstr ""
 msgctxt "#30111"
 msgid "Debugging"
 msgstr ""
+
+msgctxt "#30112"
+msgid "Extra details"
+msgstr ""
+
+msgctxt "#30113"
+msgid "VoD"
+msgstr ""
+
+msgctxt "#30114"
+msgid "Rebroadcast"
+msgstr ""
+
+msgctxt "#30115"
+msgid "Archive"
+msgstr ""
+
+msgctxt "#30116"
+msgid "Parliament"
+msgstr ""
+
+msgctxt "#30117"
+msgid "Broadcast"
+msgstr ""
+
+msgctxt "#30118"
+msgid "EuroparlTV"
+msgstr ""
+
+msgctxt "#30119"
+msgid "Sport"
+msgstr ""
+
+msgctxt "#30120"
+msgid "Sport magazines"
+msgstr ""
+
+msgctxt "#30121"
+msgid "Video"
+msgstr ""
+
+msgctxt "#30122"
+msgid "TVP Info"
+msgstr ""
+
+msgctxt "#30123"
+msgid "Live TV"
+msgstr ""

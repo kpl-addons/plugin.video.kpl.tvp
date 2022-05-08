@@ -53,6 +53,7 @@ def remove_tags(text):
 
 remove_tags.re_tags = re.compile(r'<(?P<close>/)?(?P<tag>\w+)\b.*?>', re.DOTALL)
 remove_tags.replace = {
+    'br': 'CR',
     'b': 'B',
     'strong': 'B',
     'i': 'I',
@@ -67,6 +68,8 @@ def linkid(url):
 
 def image_link(image):
     """Return URL to image by its JSON item."""
+    if image is None:
+        return None
     width = image.get('width', 1280)
     height = image.get('height', 720)
     if 'url' in image:
@@ -148,6 +151,26 @@ class TvpSite(Site):
         return self.jget('/shared/details.php',
                          params={'dump': dump, 'object_id': object_id, **kwargs})
 
+    def stations(self):
+        return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations').get('data') or ()
+
+    def station_epg(self, station_code, date):
+        return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index', params={
+            'station_code': station_code,
+            'date': date,
+        }).get('data') or ()
+
+    def station_program(self, station_code, record_id):
+        return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data', params={
+            'station_code': station_code,
+            'record_id': record_id,
+        })
+
+    def station_streams(self, station_code, record_id):
+        data = self.station_program(station_code=station_code, record_id=record_id)
+        url = data.get('data', {}).get('stream_url')
+        return self.jget(url).get('formats')
+
 
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
@@ -155,42 +178,55 @@ class TvpPlugin(Plugin):
     MENU = Menu(order_key='title', items=[
         Menu(title='Tests', when='debugging', items=[
             Menu(title=L(30104, 'API Tree'), id=2),
-            Menu(title='VoD', id=1785454),
-            Menu(title='Retransmisje', id=48583081),
+            Menu(title=L(30113, 'VoD'), id=1785454),
+            Menu(title=L(30114, 'Rebroadcast'), id=48583081),
             Menu(title="m1992's TV", id=68970),
             Menu(call='tv_hbb'),
             Menu(call='tv_stations'),
             Menu(call='tv_html'),
             Menu(call='tv_tree'),
         ]),
-        Menu(call='tv'),
+        Menu(title=L(30105, 'TV'), items=[
+            Menu(call='tv'),
+            Menu(call='replay_list'),
+            Menu(title=L(30116, 'Parliament'), items=[
+                Menu(title=L(30117, 'Broadcast'), call=call('transmissions', 4422078)),
+                Menu(title=L(30114, 'Rebroadcast'), id=4433578),
+                Menu(title=L(30118, 'EuroparlTV'), id=4615555),
+            ]),
+        ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         # Menu(title='Rekonstrucja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
-        Menu(title='Sport', items=[
-            Menu(title='Submenu test', items=[
-                Menu(title='Transmisje', call='sport'),
-                Menu(title='Retransmisje', id=48583081),
-            ]),
-            Menu(title='Transmisje', call='sport'),
-            Menu(title='Retransmisje', id=48583081),
-            Menu(title='Magazyny', id=548368),
-            Menu(title='Wideo', id=432801),
+        Menu(title=L(30119, 'Sport'), items=[
+            Menu(title=L(30117, 'Broadcast'), call='sport'),
+            Menu(title=L(30114, 'Rebroadcast'), id=48583081),
+            Menu(title=L(30120, 'Sport magazines'), id=548368),
+            Menu(title=L(30121, 'Video'), id=432801),
         ]),
-        Menu(title='Parlament', items=[
-            Menu(title='Transmisje', call=call('transmissions', 4422078)),
-            Menu(title='Retransmisje', id=4433578),
-            Menu(title='Programy EuroparlTV', id=4615555),
-        ]),
-        Menu(title='TVP Info', id=191888),
+        Menu(title=L(30122, 'TVP Info'), id=191888),
         Menu(call='search'),
         # Menu(call='settings'),
     ])
+
+    TYPES_ALLOWED = {
+        'video',
+        'directory_video',
+        'website',
+        'directory_series',
+        'directory_toplist',
+        'directory_standard',
+        'directory_epg',
+        'epg_item',
+        'directory_stats',
+        'virtual_channel',
+    }
 
     epg_url = 'http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25'
 
     def __init__(self):
         super().__init__()
         self.site = TvpSite()
+        self.colors['spec'] = 'gold'
 
     def home(self):
         self.menu()
@@ -238,10 +274,11 @@ class TvpPlugin(Plugin):
         etype = details.get('object_type')
 
         with self.directory(view='movies') as kdir:
-            if page is None:
-                kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
-            else:
-                kdir.item(f'=== {id}, page {page}', call(self.enter_listing, id=id))  # XXX DEBUG
+            if self.settings.debugging:
+                if page is None:
+                    kdir.item(f'=== {id}', call(self.enter_listing, id=id))  # XXX DEBUG
+                else:
+                    kdir.item(f'=== {id}, page {page}', call(self.enter_listing, id=id))  # XXX DEBUG
             items = data.get('items') or ()
             # if items:
             #     parents = items[0]['parents'][1:]
@@ -263,37 +300,40 @@ class TvpPlugin(Plugin):
                             kdir.menu(f'Strona {n+1}', call(self.listing, id=id, page=n+1))
                     return
 
+            items = [item for item in items if item.get('object_type') in self.TYPES_ALLOWED]
+
             # Analiza szcegółów, w tym dokładnych opisów i danych video
-            has_extra = False
-            with self.site.concurrent() as con:
-                for item in items:
-                    if 'asset_id' in item and item.get('object_type') == 'website':
-                        iid = item['asset_id']
-                        con.a[iid].details(iid)
-            for item in items:
-                iid = item.get('asset_id')
-                if iid in con.a:
-                    item['DETAILS'] = con.a[iid]
-                    has_extra = True
-            # Analiza video dostępnych pośrednio przez powyższe `DETAILS`
-            if has_extra:
+            if self.settings.api_details:
+                has_extra = False
                 with self.site.concurrent() as con:
                     for item in items:
-                        try:
+                        if 'asset_id' in item and item.get('object_type') == 'website':
                             iid = item['asset_id']
-                            if item.get('DETAILS', {}).get('directory_video'):
-                                vdir = item['DETAILS']['directory_video']
-                                if len(vdir) == 1:
-                                    vid = item['DETAILS']['directory_video'][0]['_id']
-                                    con.a[iid].listing(vid)
-                                    item['VIDEO_DIRECTORY'] = vid
-                        except (KeyError, IndexError):
-                            pass
+                            con.a[iid].details(iid)
                 for item in items:
                     iid = item.get('asset_id')
                     if iid in con.a:
-                        item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
-                                          if it.get('object_type') == 'video' and it.get('playable')]
+                        item['DETAILS'] = con.a[iid]
+                        has_extra = True
+                # Analiza video dostępnych pośrednio przez powyższe `DETAILS`
+                if has_extra:
+                    with self.site.concurrent() as con:
+                        for item in items:
+                            try:
+                                iid = item['asset_id']
+                                if item.get('DETAILS', {}).get('directory_video'):
+                                    vdir = item['DETAILS']['directory_video']
+                                    if len(vdir) == 1:
+                                        vid = item['DETAILS']['directory_video'][0]['_id']
+                                        con.a[iid].listing(vid)
+                                        item['VIDEO_DIRECTORY'] = vid
+                            except (KeyError, IndexError):
+                                pass
+                    for item in items:
+                        iid = item.get('asset_id')
+                        if iid in con.a:
+                            item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
+                                              if it.get('object_type') == 'video' and it.get('playable')]
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
             for item in items:
@@ -313,12 +353,12 @@ class TvpPlugin(Plugin):
         51696825,  # TVP Rozrywka
     ]
 
-    @entry(title=L(30105, 'TV'))
+    @entry(title=L(30123, 'Live TV'))
     def tv(self):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
         with self.directory() as kdir:
-            for item in self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations')['data']:
+            for item in self.site.stations():
                 image = self._item_image(item, preferred='image_square')
                 name, code = item['name'], item.get('code', '')
                 title = name
@@ -415,13 +455,49 @@ class TvpPlugin(Plugin):
                 self._item(kdir, items[0], title=title, debug=True)
                 log(title)
 
-    # @entry(title=L('Live'), path='parlament/live')
-    # @entry(title=L('Live'))
-    # def parlament_live(self, id=4422078):
-    #     self.transmissions(id)
+    @entry(path='/replay', title=L(30115, 'Archive'))
+    def replay_list(self):
+        with self.directory() as kdir:
+            for item in self.site.stations():
+                image = self._item_image(item, preferred='image_square')
+                name, code = item['name'], item.get('code', '')
+                kdir.menu(name, call(self.replay_channel, code), image=image)
+
+    @entry(path='/replay/<code>')
+    def replay_channel(self, code):
+        now = datetime.now()
+        ar_date = [now - timedelta(days=n) for n in range(7)]
+        with self.directory() as kdir:
+            for date in ar_date:
+                label = f'{date:%Y-%m-%d}'
+                kdir.menu(label, call(self.replay_date, code=code, date=f'{date:%Y-%m-%d}'))
+
+    @entry(path='/replay/<code>/<date>')
+    def replay_date(self, code, date):
+        def hm(t):
+            return f'{datetime.fromtimestamp(t / 1000):%H:%M}'
+
+        now_msec = int(datetime.now().timestamp() * 1000)  # TODO handle timezone
+        with self.directory() as kdir:
+            for epg in self.site.station_epg(code, date):
+                if epg['date_start'] < now_msec:
+                    pid = epg['record_id']
+                    prog = epg.get('program', {})
+                    cycle = prog.get('cycle', {})
+                    img = self._item_image(cycle)
+                    title = epg['title']
+                    title = f'[{hm(epg["date_start"])} : {hm(epg["date_end"])}] {title}'
+                    # title = f'[{hm(epg["date_start"])}] {title}'
+                    kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, descr=epg['description'])
 
     def play_hbb(self, id: PathArg, code: PathArg = ''):
         ...
+
+    def play_program(self, code, prog):
+        streams = self.site.station_streams(code, prog)
+        if streams:
+            stream = self.get_stream_of_type(streams)
+            self._play(stream)
 
     def play_tvp_stream(self, code):
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
@@ -462,6 +538,8 @@ class TvpPlugin(Plugin):
         self.transmissions(id)
 
     def _item_image(self, item, *, preferred=None):
+        if item is None:
+            return None
         if preferred is None:
             preferred = ()
         elif isinstance(preferred, str):
@@ -477,10 +555,15 @@ class TvpPlugin(Plugin):
                     return image
 
     def _item(self, kdir, item, *, custom=None, title=None, debug=True):
+        def get_lead(name):
+            v = item.get(name, '')
+            return '' if v.startswith('!!!') else v
+
         itype = item.get('object_type')
         iid = item.get('asset_id')
         playable = item.get('playlable')
         details = item.get('DETAILS', {})
+        style = None
         # format title
         if title is None:
             title = item.get('title', item.get('name', f'#{iid}'))
@@ -504,7 +587,8 @@ class TvpPlugin(Plugin):
         # image
         image = self._item_image(item)
         # description
-        descr = item.get('lead_root') or item.get('description_root')
+        descr = (get_lead('lead_root') or item.get('description_root')
+                 or get_lead('lead') or item.get('description_') or '')
         if 'commentator' in item:
             descr += '\n\n[B]Komentarz[/B]\n' + item['commentator']
         for cue in details.get('cue_card') or ():
@@ -529,7 +613,9 @@ class TvpPlugin(Plugin):
             #         menu.append((f'Play {attr} {item[attr]}', call(self.video, id=item[attr])))
         # item
         position = 'top' if itype == 'directory_toplist' else None
-        kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu)
+        if position and not style:
+            style = ['COLOR :spec', 'B']
+        kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu, style=style)
         if itype in ('video', 'epg_item'):
             # if 'virtual_channel_id' in item:
             #     iid = item['virtual_channel_id']
@@ -685,7 +771,8 @@ class TvpPlugin(Plugin):
         subt = []
         if 'subtitles' in d:
             if d['subtitles']:
-                path = self.profile_path / 'temp'
+                path: Path = self.profile_path / 'temp'
+                path.mkdir(parents=True, exist_ok=True)
                 for n, it in enumerate(d['subtitles']):
                     urlSubt = it['src']
                     resp = self.site.get(urlSubt)
@@ -708,7 +795,8 @@ class TvpPlugin(Plugin):
             log.warning(f'Subtiles JSON failed {exc} on {respJSON!r}', title='TVP')
             return []
         subt = []
-        path = self.profile_path / 'temp'
+        path: Path = self.profile_path / 'temp'
+        path.mkdir(parents=True, exist_ok=True)
         if 'subtitles' in data and len(data['subtitles']):
             for n, d in enumerate(data['subtitles']):
                 urlSubt = url.join(d['url'])
@@ -793,7 +881,9 @@ class TvpPlugin(Plugin):
             if 'material_niedostepny' not in st['url']:
                 for mime, stype in mime_types.items():
                     if st['mimeType'] == mime:
-                        url = URL(st['url']) % {'end': ''}
+                        url = URL(st['url'])
+                        if 'end' not in url.query:
+                            url = url % {'end': ''}
                         return Stream(url=url, proto=stype.proto, mime=stype.mime)
 
 
