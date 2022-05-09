@@ -7,6 +7,8 @@ from libka.path import Path
 from libka.menu import Menu, MenuItems
 from libka.utils import html_json, html_json_iter
 from libka.format import safefmt
+from libka.lang import day_label
+from libka.calendar import str2date
 # from pdom import select as dom_select
 import json
 from collections.abc import Mapping
@@ -14,6 +16,8 @@ from collections import namedtuple
 from html import unescape
 from datetime import datetime, timedelta
 import re
+from enum import IntEnum
+import requests  # onlu for status code ok
 import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
 try:
@@ -34,8 +38,15 @@ except ModuleNotFoundError:
 # TVP SPORT Wideo(?) - https://sport.tvp.pl/wideo
 # TVP INFO - https://www.tvp.info/nasze-programy
 
-
+# Some "const" defines (as unique values).
 UNLIMITED = object()
+CurrentAndFuture = object()
+
+
+class TransmissionLayout(IntEnum):
+    DayFolder = 0
+    DayLabel = 1
+    SingleList = 2
 
 
 def remove_tags(text):
@@ -135,17 +146,18 @@ class TvpSite(Site):
             yield item
 
     # Dicts `filter` and `order` could be in arguments because they are read-only.
-    def transmissions(self, parent_id, dump='json', direct=False, type='epg_item',
+    def transmissions(self, parent_id, *, dump='json', direct=False, type='epg_item',
                       filter={'is_live': True}, order={'release_date_long': -1}, **kwargs):
+        if filter is CurrentAndFuture:
+            filter = f'release_date_long>={datetime.utcnow().timestamp()*1000}'
         return self.listing(parent_id, dump=dump, direct=direct, type=type, filter=filter, order=order, **kwargs)
 
     # Dicts `filter` and `order` could be in arguments because they are read-only.
-    def transmissions_items(self, parent_id, dump='json', direct=False, type='epg_item',
+    def transmissions_items(self, parent_id, *, dump='json', direct=False, type='epg_item',
                             filter={'is_live': True}, order={'release_date_long': -1}, **kwargs):
         data = self.transmissions(parent_id, dump=dump, direct=direct, type=type, filter=filter, order=order, **kwargs)
         # reverse reversed ('release_date_long': -1) list
-        for item in reversed(data.get('items') or ()):
-            yield item
+        return reversed(data.get('items') or ())
 
     def details(self, object_id, *, dump='json', **kwargs):
         return self.jget('/shared/details.php',
@@ -170,6 +182,22 @@ class TvpSite(Site):
         data = self.station_program(station_code=station_code, record_id=record_id)
         url = data.get('data', {}).get('stream_url')
         return self.jget(url).get('formats')
+
+    def blackburst(self, parent_id, *, dump='json', direct=False, type='video', nocount=1, copy=False,
+                   filter={'playable': True}, order='release_date_long,-1', release_date=None, **kwargs):
+        count = kwargs.pop('count', self.count)
+        if count is None or count is UNLIMITED:
+            count = ''
+        if kwargs.get('page', ...) is None:
+            kwargs.pop('page')
+        filter = dict(filter)
+        if release_date:
+            filter['release_date_long'] = {'$lt': release_date.timestamp() * 1000}
+        # filter['play_mode'] = 1
+        return self.jget('/shared/listing_blackburst.php',
+                         params={'dump': dump, 'direct': direct, 'count': count, 'parent_id': parent_id,
+                                 'nocount': nocount, 'copy': copy, 'type': type, 'filter': filter, 'order': order,
+                                 **kwargs})
 
 
 class TvpPlugin(Plugin):
@@ -198,7 +226,7 @@ class TvpPlugin(Plugin):
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         # Menu(title='Rekonstrucja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
         Menu(title=L(30119, 'Sport'), items=[
-            Menu(title=L(30117, 'Broadcast'), call='sport'),
+            Menu(title=L(30117, 'Broadcast'), call=call('transmissions', 13010508)),
             Menu(title=L(30114, 'Rebroadcast'), id=48583081),
             Menu(title=L(30120, 'Sport magazines'), id=548368),
             Menu(title=L(30121, 'Video'), id=432801),
@@ -470,7 +498,7 @@ class TvpPlugin(Plugin):
         with self.directory() as kdir:
             for date in ar_date:
                 label = f'{date:%Y-%m-%d}'
-                kdir.menu(label, call(self.replay_date, code=code, date=f'{date:%Y-%m-%d}'))
+                kdir.menu(label, call(self.replay_date, code=code, date=f'{date:%Y%m%d}'))
 
     @entry(path='/replay/<code>/<date>')
     def replay_date(self, code, date):
@@ -507,6 +535,7 @@ class TvpPlugin(Plugin):
             self._play(stream)
 
     def _play(self, stream):
+        log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
         is_helper = Helper(stream.proto)
         if is_helper.check_inputstream():
@@ -519,23 +548,39 @@ class TvpPlugin(Plugin):
             play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
             xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
 
-    def transmissions(self, id: PathArg):
+    def transmissions(self, id: PathArg, date=None):
         """Live transmistions (sport: 13010508, parlament: 4422078)."""
         now = datetime.utcnow()
+        local_now = now + self.tz_offset
+        local_prev = datetime.fromtimestamp(86400)
+        layout = self.settings.transmission_layout
+        if date:
+            date = str2date(date)
         with self.directory() as kdir:
             # Reverse reversed order - get from current to future.
-            for item in self.site.transmissions_items(id):
+            for item in self.site.transmissions_items(id, filter=CurrentAndFuture):
                 # Only current and future
                 end = item.get('broadcast_end_date_long', 0)
                 if end:
                     end = datetime.utcfromtimestamp(end / 1000)
-                    if end < now:
-                        continue  # skip past tranmison
-                self._item(kdir, item)
-
-    def sport(self, id=13010508):
-        """Sport transmistion (13010508)."""
-        self.transmissions(id)
+                    if item.get('is_live') and end >= now:
+                        start = datetime.utcfromtimestamp(item.get('release_date_long',
+                                                                   item.get('broadcast_start_long', 0)) / 1000)
+                        local_start = start + self.tz_offset
+                        if date is None or local_start.date() == date:
+                            if date is not None or layout == TransmissionLayout.SingleList:
+                                self._item(kdir, item)
+                            elif layout == TransmissionLayout.DayFolder:
+                                if local_start.date() != local_prev.date():
+                                    title = day_label(local_start, now=local_now)
+                                    kdir.menu(title, call(self.transmissions, id, date=local_start.date()))
+                            elif layout == TransmissionLayout.DayLabel:
+                                if local_start.date() != local_prev.date():
+                                    title = day_label(local_start, now=local_now)
+                                    # kdir.separator(title)
+                                    kdir.separator(title, folder=call(self.transmissions, id, date=local_start.date()))
+                                self._item(kdir, item, single_day=True)
+                            local_prev = local_start
 
     def _item_image(self, item, *, preferred=None):
         if item is None:
@@ -554,7 +599,13 @@ class TvpPlugin(Plugin):
                 if image:
                     return image
 
-    def _item(self, kdir, item, *, custom=None, title=None, debug=True):
+    def _item(self, kdir, item, *, custom=None, title=None, single_day=False, debug=True):
+        """
+        Parameters
+        ----------
+        single_day : bool
+            True if start time is single day (time only).
+        """
         def get_lead(name):
             v = item.get(name, '')
             return '' if v.startswith('!!!') else v
@@ -582,8 +633,17 @@ class TvpPlugin(Plugin):
             start = datetime.utcfromtimestamp(start / 1000)
             end = datetime.utcfromtimestamp(end / 1000)
             now = datetime.utcnow()
-            if start > now or 1:
-                title += f' [{start:%H:%M %d.%m.%Y}]'
+            if end > now:
+                future = start > now
+                if single_day or start.date() == now.date() or start + timedelta(hours=6) < now:
+                    # the same day or next 6h: only HH:MM
+                    time = f'[{start + self.tz_offset:%H:%M}]'
+                else:
+                    # more then 6h: yyyy.mm.dd HH:MM
+                    time = f'[{start + self.tz_offset:%Y.%m.%d %H:%M}]'
+                if future:
+                    time = self.format_title(time, ['COLOR gray'])
+                title = f'{time} {title}'
         # image
         image = self._item_image(item)
         # description
@@ -598,6 +658,7 @@ class TvpPlugin(Plugin):
         # menu
         menu = []
         # raise KeyError('a')
+        menu.append((f'!!!', self.exception))
         if debug:
             menu.append((f'ID {iid}', self.refresh))
             menu.append((f'Playlable {playable}', self.refresh))
@@ -623,6 +684,8 @@ class TvpPlugin(Plugin):
             if 'video_id' in item:
                 iid = item['video_id']
             kdir.play(title, call(self.video, id=iid), **kwargs)
+        elif itype == 'virtual_channel':
+            kdir.menu(title, call(self.transmissions, id=iid), **kwargs)
         else:
             if item.get('VIDEOS'):
                 if len(item['VIDEOS']) == 1:
@@ -668,9 +731,8 @@ class TvpPlugin(Plugin):
 
         if 'video_id' in data:
             id = data['video_id']
-        site = Site()
         url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1&end='
-        resp = site.jget(url)
+        resp = self.site.jget(url)
         stream_url = ''
         if resp['payment_type'] != 0 or resp['status'] == 'NOT_FOUND_FOR_PLATFORM':  # ABO
             hea = {
@@ -688,7 +750,7 @@ class TvpPlugin(Plugin):
                 'grant_type': 'password',
                 'password': self.settings.getSetting('password')
             }
-            resp = site.jpost('http://www.tvp.pl/sess/oauth/oauth/access_token.php', headers=hea, data=data)
+            resp = self.site.jpost('http://www.tvp.pl/sess/oauth/oauth/access_token.php', headers=hea, data=data)
             token = ''
             log(f'TVP oauth resp: {resp!r}')
             if 'error' in resp:
@@ -708,8 +770,8 @@ class TvpPlugin(Plugin):
                     'user-agent': 'okhttp/3.8.1',
                     'access-token': token
                 }
-                resp = site.jpost(f'https://apivod.tvp.pl/tv/v2/video/{id}/default/default?device=android',
-                                  headers=hea, verify=False)
+                resp = self.site.jpost(f'https://apivod.tvp.pl/tv/v2/video/{id}/default/default?device=android',
+                                       headers=hea, verify=False)
                 if resp['success'] == 0:
                     xbmcgui.Dialog().notification('[B]Błąd[/B]', '[Strefa ABO] Brak uprawnień', xbmcgui.NOTIFICATION_INFO, 8000, False)
                 else:
@@ -750,20 +812,41 @@ class TvpPlugin(Plugin):
 
         else:  # free
             log(f'free video: {id}', title='TVP')
+            stream = Stream(stream_url, '', '')
             if 'formats' in resp:
-                for f in resp['formats']:
-                    if f['mimeType'] == 'application/x-mpegurl':
-                        stream_url = f['url']
-                        break
-                else:
+                stream = self.get_stream_of_type(resp['formats'], end=False)
+                if stream_url is not None:
+                    if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
+                            and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
+                        # remove `end` if eror
+                        log(f'Remove `end` from {url!r}')
+                        url = stream.url
+                        url = url.with_query([(k, v) for k, v in url.query.items() if k != 'end'])
+                        stream = stream._replace(url=url)
+                    # XXX TEST
+                    # subt = self.subt_gen_free(id)
+                    play_item = xbmcgui.ListItem(path=str(stream.url))
+                    play_item.setProperty('IsPlayable', 'true')
+                    # play_item.setSubtitles(subt)
+                    log(f'PLAY!: handle={self.handle!r}, url={stream!r}', title='TVP')
+                    xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
+                    return
+                    return self._play(stream)
+                # for stream_url in self.iter_stream_of_type(resp['formats'], end=False):
+                #     resp = self.site.head(stream_url.url).status_code
+                #     log(f'SSSSSSSSSS {resp.status_code!r} for {stream_url!r}')
+                #     if resp.ok:
+                #         break
+                # else:
                     xbmcgui.Dialog().notification('[B]Błąd[/B]', 'Brak strumienia do odtworzenia.',
                                                   xbmcgui.NOTIFICATION_INFO, 3000, False)
+                    xbmcplugin.setResolvedUrl(self.handle, False, listitem=xbmcgui.ListItem())
                     return
             subt = self.subt_gen_free(id)
-            play_item = xbmcgui.ListItem(path=stream_url)
+            play_item = xbmcgui.ListItem(path=str(stream.url))
             play_item.setProperty('IsPlayable', 'true')
             play_item.setSubtitles(subt)
-            log(f'PLAY: handle={self.handle!r}, url={stream_url!r}', title='TVP')
+            log(f'PLAY: handle={self.handle!r}, url={stream!r}', title='TVP')
             xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
 
     def subt_gen_ABO(self, d):
@@ -788,11 +871,14 @@ class TvpPlugin(Plugin):
             return []
         url = URL('https://vod.tvp.pl/sess/TVPlayer2/api.php?id={aId}&@method=getTvpConfig&@callback=?')
         resp = self.site.get(url).text
-        respJSON = re.findall(r'_\((.*)\)', resp, re.DOTALL)[0]
+        resp = re.findall(r'_\((.*)\)', resp, re.DOTALL)[0]
+        if resp.startswith('null,'):
+            log.info(f'No subtiles for {aId!r}', title='TVP')
+            return []
         try:
-            data = json.loads(respJSON)['content']
+            data = json.loads(resp)['content']
         except Exception as exc:
-            log.warning(f'Subtiles JSON failed {exc} on {respJSON!r}', title='TVP')
+            log.warning(f'Subtiles JSON failed {exc} on {resp!r}', title='TVP')
             return []
         subt = []
         path: Path = self.profile_path / 'temp'
@@ -862,7 +948,7 @@ class TvpPlugin(Plugin):
             yield ChannelInfo(code, name, img, ch_id)
 
     @staticmethod
-    def get_stream_of_type(streams):
+    def iter_stream_of_type(streams, *, end=True):
         mime_types = {
             'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
             'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
@@ -882,9 +968,17 @@ class TvpPlugin(Plugin):
                 for mime, stype in mime_types.items():
                     if st['mimeType'] == mime:
                         url = URL(st['url'])
-                        if 'end' not in url.query:
+                        if end and 'end' not in url.query:
                             url = url % {'end': ''}
-                        return Stream(url=url, proto=stype.proto, mime=stype.mime)
+                        yield Stream(url=url, proto=stype.proto, mime=stype.mime)
+
+    @staticmethod
+    def get_stream_of_type(streams, *, end=True):
+        for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
+            return stream
+
+    def exception(self):
+        raise RuntimeError()
 
 
 # DEBUG ONLY

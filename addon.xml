@@ -22,7 +22,10 @@
 		<website>https://github.com/kpl-addons/plugin.video.kpl.tvp</website>
 		<assets>
 			<icon>resources/icon.png</icon>
-			<fanart>resources/fanart.jpg</fanart>
+			<fanart>resources/fanart.png</fanart>
+			<poster>resources/poster.png</poster>
+			<landscape>resources/landscape.png</landscape>
+			<banner>resources/banner.png</banner>
 		</assets>
 		<news></news>
 		<reuselanguageinvoker>true</reuselanguageinvoker>

@@ -1,7 +1,12 @@
 <settings version="1">
 	<section id="plugin.video.kpl.tvp">
 		<category id="tvp_main" label="30103" help="">
-			<group id="1">
+			<group id="11">
+				<setting id="nothing" label="Nothing to do" type="boolean">
+					<level>0</level>
+					<default>false</default>
+					<control type="toggle" />
+				</setting>
 				<setting id="email" type="string" label="30101" help="">
 					<level>0</level>
 					<default />
@@ -21,6 +26,24 @@
 					<control type="edit" format="string">
 						<heading>30102</heading>
 						<hidden>true</hidden>
+					</control>
+				</setting>
+			</group>
+		</category>
+		<category id="tvp_look" label="Look" help="">
+			<group id="21">
+				<setting id="transmission_layout" type="integer" label="Transmission layout" help="">
+					<level>0</level>
+					<default>1</default>
+					<constraints>
+						<options>
+							<option label="Day folder">0</option>
+							<option label="Day label">1</option>
+							<option label="Single list">2</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>Transmission layout</heading>
 					</control>
 				</setting>
 			</group>
