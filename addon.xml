@@ -21,11 +21,11 @@
 		<license>MIT</license>
 		<website>https://github.com/kpl-addons/plugin.video.kpl.tvp</website>
 		<assets>
-			<icon>resources/icon.png</icon>
-			<fanart>resources/fanart.png</fanart>
-			<poster>resources/poster.png</poster>
-			<landscape>resources/landscape.png</landscape>
-			<banner>resources/banner.png</banner>
+			<icon>resources/media/icon.png</icon>
+			<fanart>resources/media/fanart.png</fanart>
+			<poster>resources/media/poster.png</poster>
+			<landscape>resources/media/landscape.jpg</landscape>
+			<banner>resources/media/banner.png</banner>
 		</assets>
 		<news></news>
 		<reuselanguageinvoker>true</reuselanguageinvoker>
