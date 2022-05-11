@@ -40,6 +40,7 @@ except ModuleNotFoundError:
 
 # Some "const" defines (as unique values).
 UNLIMITED = object()
+Future = object()
 CurrentAndFuture = object()
 
 
@@ -130,6 +131,7 @@ class TvpSite(Site):
     def __init__(self, base='https://www.api.v3.tvp.pl/', *args, count=None, verify_ssl=False, **kwargs):
         super().__init__(base, *args, verify_ssl=verify_ssl, **kwargs)
         self.count = count
+        self.dT = timedelta(minutes=5)  # time epsilon (extrnd filter time range)
 
     def listing(self, parent_id, *, dump='json', direct=True, **kwargs):
         count = kwargs.pop('count', self.count)
@@ -149,7 +151,9 @@ class TvpSite(Site):
     def transmissions(self, parent_id, *, dump='json', direct=False, type='epg_item',
                       filter={'is_live': True}, order={'release_date_long': -1}, **kwargs):
         if filter is CurrentAndFuture:
-            filter = f'release_date_long>={datetime.utcnow().timestamp()*1000}'
+            filter = f'broadcast_end_date_long>={(datetime.now() - self.dT).timestamp()*1000}'
+        elif filter is Future:
+            filter = f'release_date_long>={(datetime.now() - self.dT).timestamp()*1000}'
         return self.listing(parent_id, dump=dump, direct=direct, type=type, filter=filter, order=order, **kwargs)
 
     # Dicts `filter` and `order` could be in arguments because they are read-only.
@@ -548,6 +552,22 @@ class TvpPlugin(Plugin):
             play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
             xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
 
+    def _item_start_time(self, item):
+        start = item.get('release_date_long', item.get('broadcast_start_long', 0)) / 1000
+        if not start:
+            return None
+        start = datetime.fromtimestamp(start) - self.tz_offset
+        return start
+
+    def _item_end_time(self, item):
+        end = datetime.utcfromtimestamp(item.get('release_date_long',
+                                                 item.get('broadcast_start_long', 0)) / 1000)
+        end = item.get('broadcast_end_date_long', 0) / 1000
+        if not end:
+            return None
+        end = datetime.fromtimestamp(end) - self.tz_offset
+        return end
+
     def transmissions(self, id: PathArg, date=None):
         """Live transmistions (sport: 13010508, parlament: 4422078)."""
         now = datetime.utcnow()
@@ -560,13 +580,13 @@ class TvpPlugin(Plugin):
             # Reverse reversed order - get from current to future.
             for item in self.site.transmissions_items(id, filter=CurrentAndFuture):
                 # Only current and future
-                end = item.get('broadcast_end_date_long', 0)
+                end = self._item_end_time(item)
                 if end:
-                    end = datetime.utcfromtimestamp(end / 1000)
-                    if item.get('is_live') and end >= now:
-                        start = datetime.utcfromtimestamp(item.get('release_date_long',
-                                                                   item.get('broadcast_start_long', 0)) / 1000)
+                    # log(f'now={now}, @now={local_now}, end={end} ({end + self.tz_offset}), live={item.get("is_live")}', title='===TIME===')
+                    if item.get('is_live') and end + self.site.dT >= now:
+                        start = self._item_start_time(item)
                         local_start = start + self.tz_offset
+                        # log(f'now={now}, @now={local_now}, start={start} ({local_start}, end={end}', title='TIME')
                         if date is None or local_start.date() == date:
                             if date is not None or layout == TransmissionLayout.SingleList:
                                 self._item(kdir, item)
@@ -577,7 +597,6 @@ class TvpPlugin(Plugin):
                             elif layout == TransmissionLayout.DayLabel:
                                 if local_start.date() != local_prev.date():
                                     title = day_label(local_start, now=local_now)
-                                    # kdir.separator(title)
                                     kdir.separator(title, folder=call(self.transmissions, id, date=local_start.date()))
                                 self._item(kdir, item, single_day=True)
                             local_prev = local_start
@@ -627,13 +646,11 @@ class TvpPlugin(Plugin):
         if self.settings.debugging:
             title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
         # broadcast time
-        start = item.get('release_date_long', item.get('broadcast_start_long', 0))
-        end = item.get('broadcast_end_date_long', 0)
+        start = self._item_start_time(item)
+        end = self._item_end_time(item)
         if start and end:
-            start = datetime.utcfromtimestamp(start / 1000)
-            end = datetime.utcfromtimestamp(end / 1000)
             now = datetime.utcnow()
-            if end > now:
+            if end + self.site.dT > now:
                 future = start > now
                 if single_day or start.date() == now.date() or start + timedelta(hours=6) < now:
                     # the same day or next 6h: only HH:MM
@@ -643,6 +660,8 @@ class TvpPlugin(Plugin):
                     time = f'[{start + self.tz_offset:%Y.%m.%d %H:%M}]'
                 if future:
                     time = self.format_title(time, ['COLOR gray'])
+                elif end < now:
+                    time = self.format_title(time, ['COLOR red'])  # transmisja powinna być zakończona, do 5min
                 title = f'{time} {title}'
         # image
         image = self._item_image(item)
@@ -701,23 +720,13 @@ class TvpPlugin(Plugin):
         data = self.site.details(id)
         log(f"Video: {id}, type={data.get('type')}, live_video_id={data.get('live_video_id')},"
             f" video_id={data.get('video_id')}", title='TVP')
-        if data.get('type') == 'virtual_channel' and 'live_video_id' in data:
-            id = data['live_video_id']
-        # 'type': 'virtual_channel',
-        # 'object_type': 'virtual_channel',
-        # 'parents': [38533322, 38345166, 38345015, 2],
-        # 'signature': 'TVP3 Wrocław',
-        # 'title': 'EPG - TVP Wroc',
-        # 'vortal_id': 38533322,
-        # 'live_video_id': 50841981,
-        start = data.get('release_date_long', data.get('broadcast_start_long', 0))
-        end = data.get('broadcast_end_date_long', 0)
+        ###!!! if data.get('type') == 'virtual_channel' and 'live_video_id' in data:
+        ###!!!     id = data['live_video_id']
+        start = self._item_start_time(data)
+        end = self._item_end_time(data)
         if start:
             now = datetime.utcnow()
-            start = datetime.utcfromtimestamp(start / 1000)
-            if end:
-                end = datetime.utcfromtimestamp(end / 1000)
-            else:
+            if not end:
                 try:
                     end = start + timedelta(seconds=data['duration'])
                 except KeyError:
@@ -731,7 +740,10 @@ class TvpPlugin(Plugin):
 
         if 'video_id' in data:
             id = data['video_id']
-        url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1&end='
+        # url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1&time_shift=true&end='
+        url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}&sdt_version=1&time_shift=true'
+        # url = f'https://www.tvp.pl/shared/cdn/tokenizer.php?object_id={id}&time_shift=true&end='
+        url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}'
         resp = self.site.jget(url)
         stream_url = ''
         if resp['payment_type'] != 0 or resp['status'] == 'NOT_FOUND_FOR_PLATFORM':  # ABO
@@ -818,7 +830,7 @@ class TvpPlugin(Plugin):
                 if stream_url is not None:
                     if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                             and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
-                        # remove `end` if eror
+                        # remove `end` if error
                         log(f'Remove `end` from {url!r}')
                         url = stream.url
                         url = url.with_query([(k, v) for k, v in url.query.items() if k != 'end'])
@@ -829,8 +841,6 @@ class TvpPlugin(Plugin):
                     play_item.setProperty('IsPlayable', 'true')
                     # play_item.setSubtitles(subt)
                     log(f'PLAY!: handle={self.handle!r}, url={stream!r}', title='TVP')
-                    xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
-                    return
                     return self._play(stream)
                 # for stream_url in self.iter_stream_of_type(resp['formats'], end=False):
                 #     resp = self.site.head(stream_url.url).status_code
@@ -948,7 +958,7 @@ class TvpPlugin(Plugin):
             yield ChannelInfo(code, name, img, ch_id)
 
     @staticmethod
-    def iter_stream_of_type(streams, *, end=True):
+    def iter_stream_of_type(streams, *, end=False):
         mime_types = {
             'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
             'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
@@ -968,12 +978,12 @@ class TvpPlugin(Plugin):
                 for mime, stype in mime_types.items():
                     if st['mimeType'] == mime:
                         url = URL(st['url'])
-                        if end and 'end' not in url.query:
-                            url = url % {'end': ''}
+                        #XXX if end and 'end' not in url.query:
+                        #XXX     url = url % {'end': ''}
                         yield Stream(url=url, proto=stype.proto, mime=stype.mime)
 
     @staticmethod
-    def get_stream_of_type(streams, *, end=True):
+    def get_stream_of_type(streams, *, end=False):
         for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
             return stream
 
