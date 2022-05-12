@@ -963,7 +963,7 @@ class TvpPlugin(Plugin):
             'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
             'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
             'video/mp2t':            StreamType('hls', 'application/x-mpegURL'),
-            'application/dash+xml':  StreamType('mpd', 'application/xml+dash'),
+            'application/dash+xml':  StreamType('mpd', 'application/dash+xml'),
             'application/x-mpegurl': StreamType('hls', 'application/x-mpegURL'),
         }
 
@@ -972,7 +972,7 @@ class TvpPlugin(Plugin):
                 if st['mimeType'] == mime:
                     st['priority'] = prio
 
-        streams = sorted(streams, key=lambda d: (-int(d['totalBitrate']), d['priority']), reverse=True)
+        streams = sorted(streams, key=lambda d: ((d['priority']), -int(d['totalBitrate'])), reverse=True)
         for st in streams:
             if 'material_niedostepny' not in st['url']:
                 for mime, stype in mime_types.items():
