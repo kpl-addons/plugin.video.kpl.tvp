@@ -653,10 +653,10 @@ class TvpPlugin(Plugin):
         if self.settings.debugging:
             title = f'{title} [COLOR gray]({itype or "???"})[/COLOR]'  # XXX DEBUG
         # broadcast time
+        now = datetime.utcnow()
         start = self._item_start_time(item)
         end = self._item_end_time(item)
         if start and end:
-            now = datetime.utcnow()
             if end + self.site.dT > now:
                 future = start > now
                 if single_day or start.date() == now.date() or start + timedelta(hours=6) < now:
@@ -670,6 +670,14 @@ class TvpPlugin(Plugin):
                 elif end < now:
                     time = self.format_title(time, ['COLOR red'])  # transmisja powinna być zakończona, do 5min
                 title = f'{time} {title}'
+        elif start and start > now:
+            if item.get('paymethod') and self.settings.email and self.settings.password:
+                prefix = self.format_title('[P]', ['COLOR gold'])
+            elif start.date() == now.date():
+                prefix = self.format_title(f'[{start + self.tz_offset:%H:%M}]', ['COLOR gray'])
+            else:
+                prefix = self.format_title(f'[{start + self.tz_offset:%Y.%m.%d}]', ['COLOR gray'])
+            title = f'{prefix} {title}'
         # image
         image = self._item_image(item)
         # description
@@ -739,7 +747,7 @@ class TvpPlugin(Plugin):
                 except KeyError:
                     end = now + timedelta(days=1)
             # if not start < now < end:  # sport only current
-            if start > now:  # future
+            if not data.get('paymethod') and start > now:  # future
                 xbmcgui.Dialog().notification('TVP', 'Transmisja niedostępna teraz', xbmcgui.NOTIFICATION_INFO)
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
                 log(f'Video {id} in future: {start} > {now}', title='TVP')
@@ -764,14 +772,14 @@ class TvpPlugin(Plugin):
             # not setting defined yet
             data = {
                 'client_id': 'vod-api-android',
-                'username': self.settings.getSetting('email'),
+                'username': self.settings.email,
                 'client_secret': 'Qao*kN$t10',
                 'grant_type': 'password',
-                'password': self.settings.getSetting('password')
+                'password': self.settings.password,
             }
             resp = self.site.jpost('http://www.tvp.pl/sess/oauth/oauth/access_token.php', headers=hea, data=data)
             token = ''
-            log(f'TVP oauth resp: {resp!r}')
+            log(f'TVP oauth resp: {resp!r}', title='ABO')
             if 'error' in resp:
                 if resp['error'] == 'invalid_credentials':
                     xbmcgui.Dialog().notification('[B]Błąd[/B]',
