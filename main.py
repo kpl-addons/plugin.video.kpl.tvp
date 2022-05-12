@@ -20,6 +20,7 @@ from enum import IntEnum
 import requests  # onlu for status code ok
 import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
+import xbmcvfs  # for file in m3u generator
 try:
     from ttml2ssa import Ttml2SsaAddon
 except ModuleNotFoundError:
@@ -97,7 +98,7 @@ def image_link(image):
 StreamType = namedtuple('StreamType', 'proto mime')
 Stream = namedtuple('Stream', 'url proto mime')
 
-ChannelInfo = namedtuple('ChannelInfo', 'code name img id')
+ChannelInfo = namedtuple('ChannelInfo', 'code name image id')
 
 
 class Info(namedtuple('Info', 'data type url title image descr series linkid')):
@@ -385,18 +386,24 @@ class TvpPlugin(Plugin):
         51696825,  # TVP Rozrywka
     ]
 
+    def channel_iter_stations(self):
+        """TV channel list."""
+        # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
+        for item in self.site.stations():
+            image = self._item_image(item, preferred='image_square')
+            name, code = item['name'], item.get('code', '')
+            yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'))
+
     @entry(title=L(30123, 'Live TV'))
     def tv(self):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
         with self.directory() as kdir:
-            for item in self.site.stations():
-                image = self._item_image(item, preferred='image_square')
-                name, code = item['name'], item.get('code', '')
-                title = name
+            for ch in self.channel_iter_stations():
+                title = ch.name
                 if self.settings.debugging:
-                    title += f' [COLOR gray][{code}][/COLOR]'
-                kdir.play(title, call(self.play_tvp_stream, code), image=image)
+                    title += f' [COLOR gray][{ch.code}][/COLOR]'
+                kdir.play(title, call(self.station, ch.code), image=ch.image)
 
     @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
@@ -405,7 +412,7 @@ class TvpPlugin(Plugin):
             for ch in self.channel_iter():
                 title = f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]'
                 if ch.code:
-                    kdir.play(title, call(self.play_tvp_stream, ch.code), image=ch.img)
+                    kdir.play(title, call(self.station, ch.code), image=ch.img)
                 else:
                     title += f' [COLOR gray]{ch.id}[/COLOR]'
                     kdir.play(title, call(self.video, ch.id), image=ch.img)
@@ -417,7 +424,7 @@ class TvpPlugin(Plugin):
             for item in self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations')['data']:
                 image = self._item_image(item, preferred='image_square')
                 name, code = item['name'], item.get('code', '')
-                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]', call(self.play_tvp_stream, code), image=image)
+                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]', call(self.station, code), image=image)
 
     @entry(title=L(30108, 'TV (html)'))
     def tv_html(self):
@@ -434,7 +441,7 @@ class TvpPlugin(Plugin):
                 if any(it['station']['code'] == code for it in programs):
                     extra += ' P'
                 img = item['logo_src']
-                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]{extra}', call(self.play_tvp_stream, code), image=img)
+                kdir.play(f'{name} [COLOR gray][{code}][/COLOR]{extra}', call(self.station, code), image=img)
 
     @entry(title=L(30109, 'TV (drzewo)'))
     def tv_tree(self):
@@ -531,7 +538,7 @@ class TvpPlugin(Plugin):
             stream = self.get_stream_of_type(streams)
             self._play(stream)
 
-    def play_tvp_stream(self, code):
+    def station(self, code: PathArg):
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
         if data:
@@ -922,7 +929,7 @@ class TvpPlugin(Plugin):
         }
         return self.site.jpost('https://hbb-prod.tvp.pl/apps/manager/api/hub/graphql', json=query)
 
-    def channel_iter(self):
+    def channel_iter_hbb(self):
         """JSON-live channel list."""
         data = self.hbb_api('''
             query {
@@ -955,7 +962,7 @@ class TvpPlugin(Plugin):
                 if not width or not height:
                     width = height = 140
             img = imgdata['url'].format(width=width, height=height)
-            yield ChannelInfo(code, name, img, ch_id)
+            yield ChannelInfo(code=code, name=name, image=img, id=ch_id)
 
     @staticmethod
     def iter_stream_of_type(streams, *, end=False):
@@ -990,6 +997,31 @@ class TvpPlugin(Plugin):
     def exception(self):
         raise RuntimeError()
 
+    # Generator m3u – do zaorania
+    # TODO: make generator in the libka
+    def build_m3u(self):
+        path_m3u = self.settings.tvpgo_path_m3u
+        file_name = self.settings.tvpgo_filename
+
+        if not file_name or not path_m3u:
+            xbmcgui.Dialog().notification('TVP GO', L(30132, 'Set filename and destination directory'),
+                                          xbmcgui.NOTIFICATION_ERROR)
+            return
+
+        xbmcgui.Dialog().notification('TVP GO', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
+        data = '#EXTM3U\n'
+
+        for ch in self.channel_iter_stations():
+            url = self.mkurl(self.station, code=ch.code)
+            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" group-title="TVPGO",{ch.name}\n{url}\n'
+
+        try:
+            f = xbmcvfs.File(path_m3u + file_name, 'w')
+            f.write(data)
+        finally:
+            f.close()
+        xbmcgui.Dialog().notification('TVP GO', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
+
 
 # DEBUG ONLY
 import sys  # noqa
@@ -997,58 +1029,3 @@ log(f'\033[1mTVP\033[0m: \033[93mENTER\033[0m: {sys.argv}')
 
 # Create and run plugin.
 TvpPlugin().run()
-
-
-# Full GraphQL TV list query
-"""
-query ($categoryId: String) {
-    getLandingPageVideos(categoryId: $categoryId) {
-        type
-        title
-        elements {
-            id
-            title
-            subtitle
-            type
-            img {
-                hbbtv
-                image
-                website_holder_16x9
-                video_holder_16x9
-                __typename
-            }
-            broadcast_start_ts
-            broadcast_end_ts
-            sportType
-            label {
-                type
-                text
-                __typename
-            }
-            stats
-            {
-                video_count
-                __typename
-            }
-            __typename
-       }
-        __typename
-    }
-
-    getStationsForMainpage {
-        items {
-            id
-            name
-            code
-            image_square {
-                url
-                __typename
-            }
-            background_color
-            isNativeChanel
-            __typename
-        }
-        __typename
-    }
-}
-"""

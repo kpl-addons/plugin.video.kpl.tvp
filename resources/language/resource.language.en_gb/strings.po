@@ -103,3 +103,51 @@ msgstr ""
 msgctxt "#30123"
 msgid "Live TV"
 msgstr ""
+
+msgctxt "#30124"
+msgid "Transmission layout"
+msgstr ""
+
+msgctxt "#30125"
+msgid "File name"
+msgstr ""
+
+msgctxt "#30126"
+msgid "Nothing to do"
+msgstr ""
+
+msgctxt "#30127"
+msgid "Look"
+msgstr ""
+
+msgctxt "#30128"
+msgid "Day folder"
+msgstr ""
+
+msgctxt "#30129"
+msgid "Day label"
+msgstr ""
+
+msgctxt "#30130"
+msgid "Single list"
+msgstr ""
+
+msgctxt "#30131"
+msgid "Create M3U playlist"
+msgstr ""
+
+msgctxt "#30132"
+msgid "Set filename and destination directory"
+msgstr ""
+
+msgctxt "#30133"
+msgid "Destination directory"
+msgstr ""
+
+msgctxt "#30134"
+msgid "Generate playlist"
+msgstr ""
+
+msgctxt "#30135"
+msgid "Playlist M3U generated"
+msgstr ""

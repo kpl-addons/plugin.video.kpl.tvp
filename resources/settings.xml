@@ -2,7 +2,7 @@
 	<section id="plugin.video.kpl.tvp">
 		<category id="tvp_main" label="30103" help="">
 			<group id="11">
-				<setting id="nothing" label="Nothing to do" type="boolean">
+				<setting id="nothing" label="30126" type="boolean">
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle" />
@@ -30,20 +30,20 @@
 				</setting>
 			</group>
 		</category>
-		<category id="tvp_look" label="Look" help="">
+		<category id="tvp_look" label="30127" help="">
 			<group id="21">
-				<setting id="transmission_layout" type="integer" label="Transmission layout" help="">
+				<setting id="transmission_layout" type="integer" label="30124" help="">
 					<level>0</level>
 					<default>1</default>
 					<constraints>
 						<options>
-							<option label="Day folder">0</option>
-							<option label="Day label">1</option>
-							<option label="Single list">2</option>
+							<option label="30128">0</option>
+							<option label="30129">1</option>
+							<option label="30130">2</option>
 						</options>
 					</constraints>
 					<control type="list" format="string">
-						<heading>Transmission layout</heading>
+						<heading>30124</heading>
 					</control>
 				</setting>
 			</group>
@@ -59,6 +59,40 @@
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle" />
+				</setting>
+			</group>
+		</category>
+		<category id="tvpgo_create_playlist_m3u" label="30131" help="">
+			<group id="1" label="30132">
+				<setting id="tvpgo_filename" type="string" label="30125" help="">
+					<level>0</level>
+					<default>tvp_go.m3u</default>
+					<control type="edit" format="string">
+						<heading>30125</heading>
+					</control>
+				</setting>
+				<setting id="tvpgo_path_m3u" type="path" label="30133" help="">
+					<level>0</level>
+					<default />
+					<constraints>
+						<sources>
+							<source>auto</source>
+						</sources>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="path">
+						<heading>30133</heading>
+					</control>
+				</setting>
+				<setting id="tvpgo_build_m3u" type="action" label="30134" help="">
+					<level>0</level>
+					<data>RunPlugin(plugin://plugin.video.kpl.tvp/build_m3u)</data>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<close>true</close>
+					</control>
 				</setting>
 			</group>
 		</category>

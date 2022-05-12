@@ -34,19 +34,19 @@ msgstr "TV"
 
 msgctxt "#30106"
 msgid "TV (HBB)"
-msgstr ""
+msgstr "TV (HBB)"
 
 msgctxt "#30107"
 msgid "TV (tv-stations)"
-msgstr ""
+msgstr "TV (tv-stations)"
 
 msgctxt "#30108"
 msgid "TV (html)"
-msgstr ""
+msgstr "TV (html)"
 
 msgctxt "#30109"
 msgid "TV (drzewo)"
-msgstr ""
+msgstr "TV (drzewo)"
 
 msgctxt "#30110"
 msgid "Dev Area"
@@ -62,7 +62,7 @@ msgstr "Dodatkowe szczegóły"
 
 msgctxt "#30113"
 msgid "VoD"
-msgstr ""
+msgstr "VoD"
 
 msgctxt "#30114"
 msgid "Rebroadcast"
@@ -103,3 +103,51 @@ msgstr "TVP Info"
 msgctxt "#30123"
 msgid "Live TV"
 msgstr "Kanały na żywo"
+
+msgctxt "#30124"
+msgid "Transmission layout"
+msgstr "Układ transmisji"
+
+msgctxt "#30125"
+msgid "File name"
+msgstr "Nazwa pliku"
+
+msgctxt "#30126"
+msgid "Nothing to do"
+msgstr "Nic"
+
+msgctxt "#30127"
+msgid "Look"
+msgstr "Widok"
+
+msgctxt "#30128"
+msgid "Day folder"
+msgstr "Katalogi dzienne"
+
+msgctxt "#30129"
+msgid "Day label"
+msgstr "Sekcje dzienne"
+
+msgctxt "#30130"
+msgid "Single list"
+msgstr "Pojedyncza lista"
+
+msgctxt "#30131"
+msgid "Create M3U playlist"
+msgstr "Utwórz playliste M3U"
+
+msgctxt "#30132"
+msgid "Set filename and destination directory"
+msgstr "Ustaw nazwę pliku i katalog docelowy"
+
+msgctxt "#30133"
+msgid "Destination directory"
+msgstr "Katalog docelowy"
+
+msgctxt "#30134"
+msgid "Generate playlist"
+msgstr "Generuj playliste"
+
+msgctxt "#30135"
+msgid "Playlist M3U generated"
+msgstr "Wygenerowano playliste M3U"
