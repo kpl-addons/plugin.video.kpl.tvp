@@ -62,16 +62,16 @@
 				</setting>
 			</group>
 		</category>
-		<category id="tvpgo_create_playlist_m3u" label="30131" help="">
+		<category id="tvp_create_playlist_m3u" label="30131" help="">
 			<group id="1" label="30132">
-				<setting id="tvpgo_filename" type="string" label="30125" help="">
+				<setting id="m3u_filename" type="string" label="30125" help="">
 					<level>0</level>
-					<default>tvp_go.m3u</default>
+					<default>tvp.m3u</default>
 					<control type="edit" format="string">
 						<heading>30125</heading>
 					</control>
 				</setting>
-				<setting id="tvpgo_path_m3u" type="path" label="30133" help="">
+				<setting id="m3u_folder" type="path" label="30133" help="">
 					<level>0</level>
 					<default />
 					<constraints>
@@ -84,7 +84,7 @@
 						<heading>30133</heading>
 					</control>
 				</setting>
-				<setting id="tvpgo_build_m3u" type="action" label="30134" help="">
+				<setting id="tvp_build_m3u" type="action" label="30134" help="">
 					<level>0</level>
 					<data>RunPlugin(plugin://plugin.video.kpl.tvp/build_m3u)</data>
 					<constraints>

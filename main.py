@@ -1000,8 +1000,8 @@ class TvpPlugin(Plugin):
     # Generator m3u – do zaorania
     # TODO: make generator in the libka
     def build_m3u(self):
-        path_m3u = self.settings.tvpgo_path_m3u
-        file_name = self.settings.tvpgo_filename
+        path_m3u = self.settings.m3u_folder
+        file_name = self.settings.m3u_filename
 
         if not file_name or not path_m3u:
             xbmcgui.Dialog().notification('TVP GO', L(30132, 'Set filename and destination directory'),
@@ -1013,7 +1013,7 @@ class TvpPlugin(Plugin):
 
         for ch in self.channel_iter_stations():
             url = self.mkurl(self.station, code=ch.code)
-            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" group-title="TVPGO",{ch.name}\n{url}\n'
+            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" group-title="TVP",{ch.name}\n{url}\n'
 
         try:
             f = xbmcvfs.File(path_m3u + file_name, 'w')
