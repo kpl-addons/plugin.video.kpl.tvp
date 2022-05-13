@@ -32,13 +32,6 @@ except ModuleNotFoundError:
 # Potem poszczególne klasy wylądują w resources/lib/
 # XXX
 
-# TODO:
-# TVP VOD - https://vod.tvp.pl/
-# TVP SPORT Magazyny - https://sport.tvp.pl/magazyny
-# TVP SPORT Retransmisje - https://sport.tvp.pl/retransmisje
-# TVP SPORT Wideo(?) - https://sport.tvp.pl/wideo
-# TVP INFO - https://www.tvp.info/nasze-programy
-
 # Some "const" defines (as unique values).
 UNLIMITED = object()
 Future = object()
@@ -1012,11 +1005,11 @@ class TvpPlugin(Plugin):
         file_name = self.settings.m3u_filename
 
         if not file_name or not path_m3u:
-            xbmcgui.Dialog().notification('TVP GO', L(30132, 'Set filename and destination directory'),
+            xbmcgui.Dialog().notification('TVP', L(30132, 'Set filename and destination directory'),
                                           xbmcgui.NOTIFICATION_ERROR)
             return
 
-        xbmcgui.Dialog().notification('TVP GO', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
+        xbmcgui.Dialog().notification('TVP', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
         data = '#EXTM3U\n'
 
         for ch in self.channel_iter_stations():
@@ -1028,7 +1021,7 @@ class TvpPlugin(Plugin):
             f.write(data)
         finally:
             f.close()
-        xbmcgui.Dialog().notification('TVP GO', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
+        xbmcgui.Dialog().notification('TVP', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
 
 
 # DEBUG ONLY
