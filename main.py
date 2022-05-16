@@ -535,7 +535,7 @@ class TvpPlugin(Plugin):
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
         if data:
-            stream = self.get_stream_of_type(self.site.jget(data['stream_url']).get('formats') or ())
+            stream = self.get_stream_of_type(self.site.jget(data['stream_url']).get('formats') or (), end=True)
             self._play(stream)
 
     def _play(self, stream):
@@ -684,9 +684,8 @@ class TvpPlugin(Plugin):
         descr = remove_tags(descr)
         # menu
         menu = []
-        # raise KeyError('a')
-        menu.append((f'!!!', self.exception))
         if debug:
+            menu.append(('!!!', self.exception))
             menu.append((f'ID {iid}', self.refresh))
             menu.append((f'Playlable {playable}', self.refresh))
             for pid in item.get('parents', ()):
@@ -986,8 +985,8 @@ class TvpPlugin(Plugin):
                 for mime, stype in mime_types.items():
                     if st['mimeType'] == mime:
                         url = URL(st['url'])
-                        #XXX if end and 'end' not in url.query:
-                        #XXX     url = url % {'end': ''}
+                        if end and 'end' not in url.query:
+                            url = url % {'end': ''}
                         yield Stream(url=url, proto=stype.proto, mime=stype.mime)
 
     @staticmethod
