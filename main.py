@@ -90,8 +90,10 @@ def image_link(image):
 
 StreamType = namedtuple('StreamType', 'proto mime')
 Stream = namedtuple('Stream', 'url proto mime')
+EuVideo = namedtuple('EuVideo', 'width height rate url')
 
 ChannelInfo = namedtuple('ChannelInfo', 'code name image id')
+
 
 
 class Info(namedtuple('Info', 'data type url title image descr series linkid')):
@@ -363,7 +365,7 @@ class TvpPlugin(Plugin):
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
             for item in items:
-                self._item(kdir, item, debug=True)
+                self._item(kdir, item)
 
     # XXX  Jeszcze nieużywane
     EXTRA_TV = [
@@ -618,7 +620,7 @@ class TvpPlugin(Plugin):
                 if image:
                     return image
 
-    def _item(self, kdir, item, *, custom=None, title=None, single_day=False, debug=True):
+    def _item(self, kdir, item, *, custom=None, title=None, single_day=False):
         """
         Parameters
         ----------
@@ -684,7 +686,7 @@ class TvpPlugin(Plugin):
         descr = remove_tags(descr)
         # menu
         menu = []
-        if debug:
+        if self.settings.debugging:
             menu.append(('!!!', self.exception))
             menu.append((f'ID {iid}', self.refresh))
             menu.append((f'Playlable {playable}', self.refresh))
@@ -721,6 +723,34 @@ class TvpPlugin(Plugin):
                 iid = item.get('VIDEO_DIRECTORY', iid)
             kdir.menu(title, call(self.listing, id=iid), **kwargs)
 
+    def video_eu(self, id: PathArg[str]):
+        """Play EU video."""
+        data = self.site.jget('https://api.multimedia.europarl.europa.eu/o/epmp-frontend-rest/v1.0/getinfo',
+                              params={'mediaBusinessID':id})
+        videos = data.get('resultJSON', {}).get('content', {}).get('videos', [])
+        langs = {v['language']: sorted(EuVideo(*s['resolution'].split('x'), s['bitRate'], s['url'])
+                                       for s in v['resolutions']) for v in videos}
+        log(f'Play EU: id={id!r}, langs={len(langs)}, pl={"pl" in langs}')
+        url = None
+        for lang in ('pl', 'en'):
+            video = langs.get(lang)
+            if video:
+                url = video[0].url
+                break
+        else:
+            # any language
+            if langs:
+                video = next(iter(langs.values()))
+                if video:
+                    url = video[0].url
+        if url:
+            item = xbmcgui.ListItem(path=url)
+            item.setProperty("IsPlayable", "true")
+            xbmcplugin.setResolvedUrl(self.handle, True, listitem=item)
+        else:
+            item = xbmcgui.ListItem()
+            xbmcplugin.setResolvedUrl(self.handle, False, listitem=item)
+
     def video(self, id: PathArg[int]):
         """Play video – PlayTVPInfo by mtr81."""
         # TODO: cleanup
@@ -744,6 +774,15 @@ class TvpPlugin(Plugin):
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
                 log(f'Video {id} in future: {start} > {now}', title='TVP')
                 return
+
+        # Euro-parlament
+        if 'europarltv' in data.get('url', ''):
+            iframe = data.get('html_params', [{}])[0].get('text')
+            if iframe and '<iframe' in iframe:
+                r = re.search(r'src="([^"]*)"', iframe)
+                if r:
+                    url = URL(r.group(1))
+                    return self.video_eu(url.path.rpartition('/')[2])
 
         if 'video_id' in data:
             id = data['video_id']
