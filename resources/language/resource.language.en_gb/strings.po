@@ -81,7 +81,7 @@ msgid "Broadcast"
 msgstr ""
 
 msgctxt "#30118"
-msgid "EuroparlTV"
+msgid "EuroParliament"
 msgstr ""
 
 msgctxt "#30119"

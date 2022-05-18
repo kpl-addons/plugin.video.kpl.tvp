@@ -217,11 +217,6 @@ class TvpPlugin(Plugin):
         Menu(title=L(30105, 'TV'), items=[
             Menu(call='tv'),
             Menu(call='replay_list'),
-            Menu(title=L(30116, 'Parliament'), items=[
-                Menu(title=L(30117, 'Broadcast'), call=call('transmissions', 4422078)),
-                Menu(title=L(30114, 'Rebroadcast'), id=4433578),
-                Menu(title=L(30118, 'EuroparlTV'), id=4615555),
-            ]),
         ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
         # Menu(title='Rekonstrucja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
@@ -232,6 +227,11 @@ class TvpPlugin(Plugin):
             Menu(title=L(30121, 'Video'), id=432801),
         ]),
         Menu(title=L(30122, 'TVP Info'), id=191888),
+        Menu(title=L(30116, 'Parliament'), items=[
+            Menu(title=L(30117, 'Broadcast'), call=call('transmissions', 4422078)),
+            Menu(title=L(30114, 'Rebroadcast'), id=4433578),
+            Menu(title=L(30118, 'EuroParliament'), id=4615555),
+        ]),
         Menu(call='search'),
         # Menu(call='settings'),
     ])
@@ -724,15 +724,27 @@ class TvpPlugin(Plugin):
             kdir.menu(title, call(self.listing, id=iid), **kwargs)
 
     def video_eu(self, id: PathArg[str]):
-        """Play EU video."""
+        """Play EU video. `id` is euro-video-id or url."""
+        def langkey(v):
+            L, S = v['language'], v['subtitles']
+            if S:
+                return f'{L}/{S}'
+            return L
+
+        if isinstance(id, URL) or '://' in id:
+            url = URL(id)
+            resp = self.site.head(url, allow_redirects=False)
+            if 300 <= resp.status_code <= 399:
+                url = URL(resp.headers['location'])
+            id = url.path.rpartition('/')[2]
         data = self.site.jget('https://api.multimedia.europarl.europa.eu/o/epmp-frontend-rest/v1.0/getinfo',
-                              params={'mediaBusinessID':id})
+                              params={'mediaBusinessID': id})
         videos = data.get('resultJSON', {}).get('content', {}).get('videos', [])
-        langs = {v['language']: sorted(EuVideo(*s['resolution'].split('x'), s['bitRate'], s['url'])
+        langs = {langkey(v): sorted(EuVideo(*s['resolution'].split('x'), s['bitRate'], s['url'])
                                        for s in v['resolutions']) for v in videos}
         log(f'Play EU: id={id!r}, langs={len(langs)}, pl={"pl" in langs}')
         url = None
-        for lang in ('pl', 'en'):
+        for lang in ('pl', 'en/pl', 'en'):
             video = langs.get(lang)
             if video:
                 url = video[0].url
@@ -781,8 +793,8 @@ class TvpPlugin(Plugin):
             if iframe and '<iframe' in iframe:
                 r = re.search(r'src="([^"]*)"', iframe)
                 if r:
-                    url = URL(r.group(1))
-                    return self.video_eu(url.path.rpartition('/')[2])
+                    # pass URL to video_eu
+                    return self.video_eu(r.group(1))
 
         if 'video_id' in data:
             id = data['video_id']
