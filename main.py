@@ -7,8 +7,9 @@ from libka.path import Path
 from libka.menu import Menu, MenuItems
 from libka.utils import html_json, html_json_iter
 from libka.format import safefmt
-from libka.lang import day_label
+from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
+from libka.search import search
 # from pdom import select as dom_select
 import json
 from collections.abc import Mapping
@@ -232,7 +233,9 @@ class TvpPlugin(Plugin):
             Menu(title=L(30114, 'Rebroadcast'), id=4433578),
             Menu(title=L(30118, 'EuroParliament'), id=4615555),
         ]),
-        Menu(call='search'),
+        Menu(title=lang_text.search, items=[
+            Menu(call='search'),
+        ]),
         # Menu(call='settings'),
     ])
 
@@ -632,7 +635,7 @@ class TvpPlugin(Plugin):
             return '' if v.startswith('!!!') else v
 
         itype = item.get('object_type')
-        iid = item.get('asset_id')
+        iid = item.get('asset_id', item.get('id', item.get('_id')))
         playable = item.get('playlable')
         details = item.get('DETAILS', {})
         style = None
@@ -684,6 +687,8 @@ class TvpPlugin(Plugin):
             for par in cue.get('text_paragraph_standard') or ():
                 descr += '[CR]{}'.format(par.get('text', '').replace(r'\n', '[CR]'))
         descr = remove_tags(descr)
+        if 'release_date_dt' in item:
+            descr += f"[CR][CR]{item['release_date_dt']} {item.get('release_date_hour', '')}"
         # menu
         menu = []
         if self.settings.debugging:
@@ -700,6 +705,9 @@ class TvpPlugin(Plugin):
             # for attr in attrs:
             #     if attr in item:
             #         menu.append((f'Play {attr} {item[attr]}', call(self.video, id=item[attr])))
+        if 'SERIES' in item:
+            series = item['SERIES']
+            menu.append((series['title'], self.cmd.Container.Update(call(self.listing, series['id']))))
         # item
         position = 'top' if itype == 'directory_toplist' else None
         if position and not style:
@@ -733,6 +741,16 @@ class TvpPlugin(Plugin):
 
         if isinstance(id, URL) or '://' in id:
             url = URL(id)
+            log(f'EU !! {url}')
+            if 'MFEmbeded' in id or 'EmbedPlayer' in id:
+                # resp = self.site.txtget(url, allow_redirects=True)
+                # r = re.search(r'a="(?P<a>\d+)",s="(?P<s>\d+)",l="(?P<l>\d+)",c="(?P<c>[^"]*)"', resp)
+                # if r:
+                #     S, L = r.group('s', 'l')
+                #     url = f'https://kmc.europarltv.europa.eu/p/{S}/sp/{S}00/embedIframeJs/uiconf_id/{L}/partner_id/{S}'
+                xbmcgui.Dialog().notification('TVP', 'Embedded player jest nieobsługiwany',
+                                              xbmcgui.NOTIFICATION_INFO)
+                return self.play_failed()
             resp = self.site.head(url, allow_redirects=False)
             if 300 <= resp.status_code <= 399:
                 url = URL(resp.headers['location'])
@@ -741,7 +759,7 @@ class TvpPlugin(Plugin):
                               params={'mediaBusinessID': id})
         videos = data.get('resultJSON', {}).get('content', {}).get('videos', [])
         langs = {langkey(v): sorted(EuVideo(*s['resolution'].split('x'), s['bitRate'], s['url'])
-                                       for s in v['resolutions']) for v in videos}
+                                    for s in v['resolutions']) for v in videos}
         log(f'Play EU: id={id!r}, langs={len(langs)}, pl={"pl" in langs}')
         url = None
         for lang in ('pl', 'en/pl', 'en'):
@@ -760,8 +778,11 @@ class TvpPlugin(Plugin):
             item.setProperty("IsPlayable", "true")
             xbmcplugin.setResolvedUrl(self.handle, True, listitem=item)
         else:
-            item = xbmcgui.ListItem()
-            xbmcplugin.setResolvedUrl(self.handle, False, listitem=item)
+            self.play_failed()
+
+    def play_failed(self):
+        item = xbmcgui.ListItem()
+        xbmcplugin.setResolvedUrl(self.handle, False, listitem=item)
 
     def video(self, id: PathArg[int]):
         """Play video – PlayTVPInfo by mtr81."""
@@ -790,7 +811,7 @@ class TvpPlugin(Plugin):
         # Euro-parlament
         if 'europarltv' in data.get('url', ''):
             iframe = data.get('html_params', [{}])[0].get('text')
-            if iframe and '<iframe' in iframe:
+            if iframe and ('<iframe' in iframe or '<object' in iframe):
                 r = re.search(r'src="([^"]*)"', iframe)
                 if r:
                     # pass URL to video_eu
@@ -1014,6 +1035,25 @@ class TvpPlugin(Plugin):
                     width = height = 140
             img = imgdata['url'].format(width=width, height=height)
             yield ChannelInfo(code=code, name=name, image=img, id=ch_id)
+
+    @search.folder
+    def search_bestresults(self, query, options=None):
+        url = f'https://sport.tvp.pl/api/tvp-stream/search?query={query}&scope=bestresults&page=1&limit=&device=android'
+        with self.directory() as kdir:
+            items = self.site.jget(url).get('data', {}).get('occurrenceitem', ())
+            with self.site.concurrent() as con:
+                indexes = [con.details(item['id']) for item in items if 'id' in item]
+            items = [con[i] | {'FOUND': found} for i, found in zip(indexes, items)]
+            for item in items:
+                ### XXX log(f'SEARCH item: \n{json.dumps(item)}')
+                cycle = item.get('FOUND', {}).get('program', {}).get('cycle', {})
+                if cycle and cycle.get('title'):
+                    item['SERIES'] = {
+                        'id': item['parents'][0],
+                        'title': cycle['title'],
+                        'image_logo': cycle.get('image_logo'),
+                    }
+                self._item(kdir, item)
 
     @staticmethod
     def iter_stream_of_type(streams, *, end=False):
