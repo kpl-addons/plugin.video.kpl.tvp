@@ -1,5 +1,6 @@
 <settings version="1">
 	<section id="plugin.video.kpl.tvp">
+
 		<category id="tvp_main" label="30103" help="">
 			<group id="11">
 				<setting id="nothing" label="30126" type="boolean">
@@ -30,6 +31,7 @@
 				</setting>
 			</group>
 		</category>
+
 		<category id="tvp_look" label="30127" help="">
 			<group id="21">
 				<setting id="transmission_layout" type="integer" label="30124" help="">
@@ -46,10 +48,30 @@
 						<heading>30124</heading>
 					</control>
 				</setting>
+				<setting id="tv_icon_type" type="integer" label="30138" help="">
+					<level>0</level>
+					<default>0</default>
+					<constraints>
+						<options>
+							<option label="30139">0</option>
+							<option label="30140">1</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30138</heading>
+					</control>
+				</setting>
 			</group>
 		</category>
+
 		<category id="tvp_devmain" label="30110" help="">
 			<group id="91">
+				<setting id="developing" label="30136" type="boolean">
+					<level>0</level>
+					<default>false</default>
+					<visible>false</visible>
+					<control type="toggle" />
+				</setting>
 				<setting id="debugging" label="30111" type="boolean">
 					<level>0</level>
 					<default>false</default>
@@ -62,6 +84,7 @@
 				</setting>
 			</group>
 		</category>
+
 		<category id="tvp_create_playlist_m3u" label="30131" help="">
 			<group id="1" label="30132">
 				<setting id="m3u_filename" type="string" label="30125" help="">

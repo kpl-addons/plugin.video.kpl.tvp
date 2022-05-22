@@ -7,13 +7,15 @@ from libka.path import Path
 from libka.menu import Menu, MenuItems
 from libka.utils import html_json, html_json_iter
 from libka.format import safefmt
+from libka.tools import adict
+from libka.iter import pairnext
 from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
 from libka.search import search
 # from pdom import select as dom_select
 import json
 from collections.abc import Mapping
-from collections import namedtuple
+from collections import namedtuple, UserList, UserDict
 from html import unescape
 from datetime import datetime, timedelta
 import re
@@ -34,6 +36,7 @@ except ModuleNotFoundError:
 # XXX
 
 # Some "const" defines (as unique values).
+MISSING = object()
 UNLIMITED = object()
 Future = object()
 CurrentAndFuture = object()
@@ -43,6 +46,11 @@ class TransmissionLayout(IntEnum):
     DayFolder = 0
     DayLabel = 1
     SingleList = 2
+
+
+class TvIconType(IntEnum):
+    TvLogo = 0
+    EpgIcon = 1
 
 
 def remove_tags(text):
@@ -93,8 +101,7 @@ StreamType = namedtuple('StreamType', 'proto mime')
 Stream = namedtuple('Stream', 'url proto mime')
 EuVideo = namedtuple('EuVideo', 'width height rate url')
 
-ChannelInfo = namedtuple('ChannelInfo', 'code name image id')
-
+ChannelInfo = namedtuple('ChannelInfo', 'code name image id epg', defaults=(None,))
 
 
 class Info(namedtuple('Info', 'data type url title image descr series linkid')):
@@ -116,6 +123,55 @@ class Info(namedtuple('Info', 'data type url title image descr series linkid')):
         except (json.JSONDecodeError, KeyError, IndexError) as exc:
             log.warning(f'Can not parse video info {exc} from: {data!r}')
             return None
+
+
+class ChannelEpg(UserList):
+    """EPG for a station."""
+
+    def __init__(self, items, *, now=None):
+        super().__init__(ChannelProgram(item) for item in items or ())
+        if now is None:
+            now = datetime.now()
+        self.now = now
+        self._current = MISSING
+        self._next = MISSING
+
+    @property
+    def current(self):
+        """Current program."""
+        if self._current is MISSING:
+            prog = max((prog for prog in self if prog.start <= self.now), default=None, key=lambda prog: prog.start)
+            self._current = None if prog is None or prog.end < self.now else prog
+        return self._current
+
+    @property
+    def next(self):
+        """Next program."""
+        if self._next is MISSING:
+            prog = min((prog for prog in self if prog.start > self.now), default=None, key=lambda prog: prog.start)
+            self._next = prog
+        return self._next
+
+
+class ChannelProgram(UserDict):
+    """Single EPG program for a station."""
+
+    def __init__(self, data):
+        super().__init__(data)
+        self.start = datetime.fromtimestamp(self['date_start'] / 1000)
+        self.end = datetime.fromtimestamp(self['date_end'] / 1000)
+        self.outline = self.get('description') or ''
+        self.plot = self.get('description_long') or ''
+        prog = self.get('program') or {}
+        self.title = prog.get('title', self.data['title']) or ''
+        self.descr = f'[B]{self.title}[/B][CR]{self.start:%Y-%m-%d %H:%M}-{self.end:%H:%M}[CR]{self.plot}'
+        self.times = f'{self.start:%H:%M}-{self.end:%H:%M}'
+
+    def __getattr__(self, key):
+        try:
+            return self[key]
+        except KeyError:
+            raise AttributeError(key)
 
 
 class TvpVodSite(Site):
@@ -167,17 +223,40 @@ class TvpSite(Site):
     def stations(self):
         return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/stations').get('data') or ()
 
-    def station_epg(self, station_code, date):
+    def station_epg(self, station_code, date=None, **kwargs):
+        if date is None:
+            date = datetime.now()
+        if not isinstance(date, str):
+            date = f'{date:%Y-%m-%d}'
         return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index', params={
             'station_code': station_code,
             'date': date,
+            **kwargs,
         }).get('data') or ()
+
+    def station_full_epg(self, station_code, date=None, **kwargs):
+        epg = ChannelEpg(self.station_epg(station_code, date))
+        with self.concurrent() as con:
+            for prog in epg:
+                con.occurrence(prog.id)
+        # EPG `occurrence` sometime lay about start and end date
+        # (SKIP occurrence OVERRIDE)    epg = ChannelEpg(ChannelProgram(data['data']) for data in con)
+        epg = ChannelEpg(ChannelProgram({**occ['data'], 'date_start': prog['date_start'], 'date_end': prog['date_end']})
+                         for prog, occ in zip(epg, con))
+        return epg
 
     def station_program(self, station_code, record_id):
         return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data', params={
             'station_code': station_code,
             'record_id': record_id,
         })
+
+    def occurrence(self, id, *, device=None, **kwargs):
+        # Used in EPG
+        # device='android'
+        if device is not None:
+            kwargs['device'] = device
+        return self.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/occurrence', params={'id': id, **kwargs})
 
     def station_streams(self, station_code, record_id):
         data = self.station_program(station_code=station_code, record_id=record_id)
@@ -384,24 +463,68 @@ class TvpPlugin(Plugin):
         51696825,  # TVP Rozrywka
     ]
 
-    def channel_iter_stations(self):
+    def channel_iter_stations(self, *, epg=False, now=None):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
-        for item in self.site.stations():
+        stations = self.site.stations()
+        epgs = {}
+        if epg:
+            if now is None:
+                now = datetime.now()
+            with self.site.concurrent() as con:
+                for item in stations:
+                    code = item.get('code')
+                    if code:
+                        con[code].station_epg(code, date=now)
+            epgs = {code: ChannelEpg(epg) for code, epg in con.items()}
+            with self.site.concurrent() as con:
+                for prog in epgs.values():
+                    cur = prog.current
+                    if cur:
+                        con[cur.id].occurrence(cur.id)
+            for prog in epgs.values():
+                cur = prog.current
+                if cur:
+                    prog._current = ChannelProgram({**con[cur.id]['data'],
+                                                    'date_start': cur['date_start'], 'date_end': cur['date_end']})
+        for item in stations:
             image = self._item_image(item, preferred='image_square')
             name, code = item['name'], item.get('code', '')
-            yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'))
+            yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'), epg=epgs.get(code))
 
     @entry(title=L(30123, 'Live TV'))
     def tv(self):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
         with self.directory() as kdir:
-            for ch in self.channel_iter_stations():
-                title = ch.name
+            for ch in self.channel_iter_stations(epg=True):
+                kwargs = {}
+                title, image = ch.name, ch.image
+                if ch.epg and ch.epg.current:
+                    channel, prog = ch, ch.epg.current
+                    title = f'[{prog.times}] {channel.name} – {prog.title}'
+                    plot = f'[B]{ch.epg.current.title}[/B][CR]{ch.epg.current.outline}'
+                    descr = ch.epg.current.descr
+                    if ch.epg.next:
+                        extra = f'[CR][CR]{ch.epg.next.start:%H:%M} – {ch.epg.next.title}'
+                        plot += extra
+                        descr += extra
+                    kwargs['info'] = {
+                        'outline': ch.epg.current.outline,
+                        'plotoutline': plot,
+                        'plot': descr,
+                    }
+                    kwargs['menu'] = [
+                        (L(30137, 'Porgram'),
+                         self.cmd.Container.Update(call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'))),
+                        (L(30115, 'Archive'), self.cmd.Container.Update(call(self.replay_channel, ch.code))),
+                    ]
+                    if self.settings.tv_icon_type == TvIconType.EpgIcon:
+                        eprog = prog.get('program') or {}
+                        image = self._item_image(eprog, eprog.get('cycle'), default=image)
                 if self.settings.debugging:
                     title += f' [COLOR gray][{ch.code}][/COLOR]'
-                kdir.play(title, call(self.station, ch.code), image=ch.image)
+                kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
 
     @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
@@ -498,7 +621,8 @@ class TvpPlugin(Plugin):
             for item in self.site.stations():
                 image = self._item_image(item, preferred='image_square')
                 name, code = item['name'], item.get('code', '')
-                kdir.menu(name, call(self.replay_channel, code), image=image)
+                kdir.menu(name, call(self.replay_channel, code), image=image,
+                          menu=[(L(30123, 'Live TV'), self.cmd.PlayMedia(call(self.station, code)))])
 
     @entry(path='/replay/<code>')
     def replay_channel(self, code):
@@ -507,25 +631,37 @@ class TvpPlugin(Plugin):
         with self.directory() as kdir:
             for date in ar_date:
                 label = f'{date:%Y-%m-%d}'
-                kdir.menu(label, call(self.replay_date, code=code, date=f'{date:%Y%m%d}'))
+                menu = []
+                if self.settings.developing or self.settings.debugging:
+                    menu.append(('!!!', self.exception))
+                menu.append((L(30123, 'Live TV'), self.cmd.PlayMedia(call(self.station, code))))
+                kdir.menu(label, call(self.replay_date, code=code, date=f'{date:%Y%m%d}'), menu=menu)
 
     @entry(path='/replay/<code>/<date>')
-    def replay_date(self, code, date):
-        def hm(t):
-            return f'{datetime.fromtimestamp(t / 1000):%H:%M}'
-
+    def replay_date(self, code, date, *, future=False):
         now_msec = int(datetime.now().timestamp() * 1000)  # TODO handle timezone
         with self.directory() as kdir:
-            for epg in self.site.station_epg(code, date):
-                if epg['date_start'] < now_msec:
-                    pid = epg['record_id']
-                    prog = epg.get('program', {})
-                    cycle = prog.get('cycle', {})
-                    img = self._item_image(cycle)
-                    title = epg['title']
-                    title = f'[{hm(epg["date_start"])} : {hm(epg["date_end"])}] {title}'
-                    # title = f'[{hm(epg["date_start"])}] {title}'
-                    kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, descr=epg['description'])
+            for prog in self.site.station_full_epg(code, date):
+                archive = prog['date_start'] < now_msec
+                if archive or future:
+                    pid = prog['record_id']
+                    eprog = prog.get('program', {})
+                    img = self._item_image(eprog, eprog.get('cycle'))
+                    title = f'[{prog.times}] {prog.title}'
+                    info = {
+                        'outline': prog.outline,
+                        'plotoutline': f'[B]{prog.title}[/B][CR]{prog.outline}',
+                        'plot': prog.descr,
+                    }
+                    if archive:
+                        kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, info=info)
+                    else:
+                        title = f'[I]{title}[/I]'
+                        kdir.item(title, self.no_operation, image=img, info=info)
+
+    @entry(path='/station-program/<code>/<date>')
+    def station_program(self, code, date, *, future=True):
+        return self.replay_date(code, date, future=future)
 
     def play_hbb(self, id: PathArg, code: PathArg = ''):
         ...
@@ -606,22 +742,24 @@ class TvpPlugin(Plugin):
                                 self._item(kdir, item, single_day=True)
                             local_prev = local_start
 
-    def _item_image(self, item, *, preferred=None):
-        if item is None:
-            return None
-        if preferred is None:
-            preferred = ()
-        elif isinstance(preferred, str):
-            preferred = (preferred,)
-        image = None
-        for img_attr in (*preferred, 'image', 'image_16x9', *(key for key in item if key.startswith('image_'))):
-            images = item.get(img_attr) or ()
-            if isinstance(images, Mapping):
-                images = (images,)
-            for img_data in images:
-                image = image_link(img_data)
-                if image:
-                    return image
+    def _item_image(self, *items, preferred=None, default=None):
+        for item in items:
+            if item is None:
+                return None
+            if preferred is None:
+                preferred = ()
+            elif isinstance(preferred, str):
+                preferred = (preferred,)
+            image = None
+            for img_attr in (*preferred, 'image', 'image_16x9', *(key for key in item if key.startswith('image_'))):
+                images = item.get(img_attr) or ()
+                if isinstance(images, Mapping):
+                    images = (images,)
+                for img_data in images:
+                    image = image_link(img_data)
+                    if image:
+                        return image
+            return default
 
     def _item(self, kdir, item, *, custom=None, title=None, single_day=False):
         """
@@ -691,8 +829,12 @@ class TvpPlugin(Plugin):
             descr += f"[CR][CR]{item['release_date_dt']} {item.get('release_date_hour', '')}"
         # menu
         menu = []
+        if self.settings.developing:
+            if self.settings.debugging:
+                menu.append(('!!!', self.exception))
+            else:
+                menu.append((f'!!! {iid}', self.exception))
         if self.settings.debugging:
-            menu.append(('!!!', self.exception))
             menu.append((f'ID {iid}', self.refresh))
             menu.append((f'Playlable {playable}', self.refresh))
             for pid in item.get('parents', ()):

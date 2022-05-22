@@ -151,3 +151,23 @@ msgstr ""
 msgctxt "#30135"
 msgid "Playlist M3U generated"
 msgstr ""
+
+msgctxt "#30136"
+msgid "Under development"
+msgstr ""
+
+msgctxt "#30137"
+msgid "Porgram"
+msgstr ""
+
+msgctxt "#30138"
+msgid "TV Station Icon"
+msgstr ""
+
+msgctxt "#30139"
+msgid "TV Station Logo"
+msgstr ""
+
+msgctxt "#30140"
+msgid "Current Program icon"
+msgstr ""
