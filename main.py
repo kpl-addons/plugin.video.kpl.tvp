@@ -1,5 +1,5 @@
 
-from libka import L, Plugin, Site
+from libka import L, Plugin, Site, subobject
 from libka import call, PathArg, entry
 from libka.logs import log
 from libka.url import URL
@@ -11,8 +11,8 @@ from libka.tools import adict
 from libka.iter import pairnext
 from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
-from libka.search import search
-# from pdom import select as dom_select
+from libka.search import search, Search
+from pdom import select as dom_select
 import json
 from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
@@ -314,6 +314,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(title=lang_text.search, items=[
             Menu(call='search'),
+            Menu(title='VoD', call='vod_search'),
         ]),
         # Menu(call='settings'),
     ])
@@ -331,12 +332,15 @@ class TvpPlugin(Plugin):
         'virtual_channel',
     }
 
+    vod_search = subobject()
+
     epg_url = 'http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25'
 
     def __init__(self):
         super().__init__()
         self.site = TvpSite()
         self.colors['spec'] = 'gold'
+        self.vod_search = Search(addon=self, site=self.site, name='vod', method=self.vod_search_folder)
 
     def home(self):
         self.menu()
@@ -1234,6 +1238,27 @@ class TvpPlugin(Plugin):
                             'image_logo': cycle.get('image_logo'),
                         }
                     self._item(kdir, item)
+
+    def vod_search_folder(self, query, options=None):
+        sep = True
+        with self.directory() as kdir:
+            page = self.site.txtget('https://vod.tvp.pl/szukaj', params={'query': query})
+            log(f'VS: page.len={len(page)!r}')
+            for jsdata in dom_select(page, 'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
+                item = json.loads(unescape(jsdata))
+                log(f'VS: {item!r}')
+                sid = item['myListId']  # seris link
+                title = item['title']
+                episode = item.get('episodeCount')
+                if episode:
+                    title = f'{title}, {episode}'
+                    if sep:
+                        sep = False
+                        kdir.separator('Odcinki')
+                    sid = item.get('episodeLink', sid).rpartition(',')[2]
+                    kdir.play(title, call(self.video, sid), image=item['image'], descr=item.get('description'))
+                else:
+                    kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
     @staticmethod
     def iter_stream_of_type(streams, *, end=False):
