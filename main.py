@@ -1043,7 +1043,7 @@ class TvpPlugin(Plugin):
             items = self.site.jget(url).get('data', {}).get('occurrenceitem', ())
             with self.site.concurrent() as con:
                 indexes = [con.details(item['id']) for item in items if 'id' in item]
-            items = [con[i] | {'FOUND': found} for i, found in zip(indexes, items)]
+            items = [{**con[i], **{'FOUND': found}} for i, found in zip(indexes, items)]
             for item in items:
                 ### XXX log(f'SEARCH item: \n{json.dumps(item)}')
                 cycle = item.get('FOUND', {}).get('program', {}).get('cycle', {})
