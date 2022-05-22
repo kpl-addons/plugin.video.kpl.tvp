@@ -659,6 +659,31 @@ class TvpPlugin(Plugin):
                         title = f'[I]{title}[/I]'
                         kdir.item(title, self.no_operation, image=img, info=info)
 
+    def _epg_item(self, kdir, item, *, code=None, now=None):
+        if now is None:
+            now = datetime.now()
+        if type(item) is ChannelProgram:
+            prog = item
+        else:
+            prog = ChannelProgram(item)
+        if code is None:
+            code = prog['station_code']
+        pid = prog['record_id']
+        eprog = prog.get('program', {})
+        img = self._item_image(eprog, eprog.get('cycle'))
+        if now.date() == prog.start.date():
+            title = f'[{prog.times}] {prog.title}'
+            short = f'[B]{prog.title}[/B][CR]{prog.outline}'
+        else:
+            title = f'[{prog.start:%Y-%m-%d}] {prog.title}'
+            short = f'[B]{prog.title}[/B][CR]{prog.start:%Y-%m-%d %H:%M} - {prog.end:%H:%M}[CR]{prog.outline}'
+        info = {
+            'outline': prog.outline,
+            'plotoutline': short,
+            'plot': prog.descr,
+        }
+        kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, info=info)
+
     @entry(path='/station-program/<code>/<date>')
     def station_program(self, code, date, *, future=True):
         return self.replay_date(code, date, future=future)
@@ -1180,22 +1205,35 @@ class TvpPlugin(Plugin):
 
     @search.folder
     def search_bestresults(self, query, options=None):
+        def details(con, item):
+            itype = item.get('type')
+            if itype == 'OCCURRENCE':
+                return con.occurrence(item['id'])
+            else:
+                return con.details(item['id'])
+
+        now = datetime.now()
         url = f'https://sport.tvp.pl/api/tvp-stream/search?query={query}&scope=bestresults&page=1&limit=&device=android'
         with self.directory() as kdir:
             items = self.site.jget(url).get('data', {}).get('occurrenceitem', ())
             with self.site.concurrent() as con:
-                indexes = [con.details(item['id']) for item in items if 'id' in item]
-            items = [{**con[i], **{'FOUND': found}} for i, found in zip(indexes, items)]
-            for item in items:
-                ### XXX log(f'SEARCH item: \n{json.dumps(item)}')
-                cycle = item.get('FOUND', {}).get('program', {}).get('cycle', {})
-                if cycle and cycle.get('title'):
-                    item['SERIES'] = {
-                        'id': item['parents'][0],
-                        'title': cycle['title'],
-                        'image_logo': cycle.get('image_logo'),
-                    }
-                self._item(kdir, item)
+                indexes = [details(con, item) for item in items if 'id' in item]
+            # items = [{**con[i], **{'FOUND': found}} for i, found in zip(indexes, items)]
+            for index, found in zip(indexes, items):
+                itype = found.get('type')
+                if itype == 'OCCURRENCE':
+                    self._epg_item(kdir, con[index]['data'], now=now)
+                else:
+                    item = con[index]
+                    item['FOUND'] = found
+                    cycle = found.get('program', {}).get('cycle', {})
+                    if cycle and cycle.get('title'):
+                        item['SERIES'] = {
+                            'id': item['parents'][0],
+                            'title': cycle['title'],
+                            'image_logo': cycle.get('image_logo'),
+                        }
+                    self._item(kdir, item)
 
     @staticmethod
     def iter_stream_of_type(streams, *, end=False):
