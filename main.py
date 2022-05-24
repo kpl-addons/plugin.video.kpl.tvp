@@ -313,8 +313,8 @@ class TvpPlugin(Plugin):
             Menu(title=L(30118, 'EuroParliament'), id=4615555),
         ]),
         Menu(title=lang_text.search, items=[
-            Menu(call='search'),
-            Menu(title='VoD', call='vod_search'),
+            Menu(title='TVP VOD', call='vod_search'),
+            Menu(title='TVP GO', call='search'),
         ]),
         # Menu(call='settings'),
     ])

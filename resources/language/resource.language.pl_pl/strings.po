@@ -12,18 +12,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=3; plural=(n==1 ? 0 : n%10>=2 && n%10<=4 && (n%100<10 || n%100>=20) ? 1 : 2);\n"
 
-msgctxt "#30101"
-msgid "E-mail"
-msgstr "E-mail"
-
-msgctxt "#30102"
-msgid "Password"
-msgstr "Hasło"
-
-msgctxt "#30103"
-msgid "Main"
-msgstr "Główne"
-
 msgctxt "#30104"
 msgid "API Tree"
 msgstr "Drzewo API"
@@ -47,18 +35,6 @@ msgstr "TV (html)"
 msgctxt "#30109"
 msgid "TV (drzewo)"
 msgstr "TV (drzewo)"
-
-msgctxt "#30110"
-msgid "Dev Area"
-msgstr "Strefa dev"
-
-msgctxt "#30111"
-msgid "Debugging"
-msgstr "Debugowanie"
-
-msgctxt "#30112"
-msgid "Extra details"
-msgstr "Dodatkowe szczegóły"
 
 msgctxt "#30113"
 msgid "VoD"
@@ -104,6 +80,46 @@ msgctxt "#30123"
 msgid "Live TV"
 msgstr "Kanały na żywo"
 
+msgctxt "#30132"
+msgid "Set filename and destination directory"
+msgstr "Ustaw nazwę pliku i katalog docelowy"
+
+msgctxt "#30134"
+msgid "Generate playlist"
+msgstr "Generuj playliste"
+
+msgctxt "#30135"
+msgid "Playlist M3U generated"
+msgstr "Wygenerowano playliste M3U"
+
+msgctxt "#30137"
+msgid "Porgram"
+msgstr "Program"
+
+msgctxt "#30101"
+msgid "E-mail"
+msgstr "E-mail"
+
+msgctxt "#30102"
+msgid "Password"
+msgstr "Hasło"
+
+msgctxt "#30103"
+msgid "Main"
+msgstr "Główne"
+
+msgctxt "#30110"
+msgid "Advanced"
+msgstr "Zaawansowane"
+
+msgctxt "#30111"
+msgid "Debugging"
+msgstr "Debugowanie"
+
+msgctxt "#30112"
+msgid "Extra details"
+msgstr "Dodatkowe szczegóły"
+
 msgctxt "#30124"
 msgid "Transmission layout"
 msgstr "Układ transmisji"
@@ -136,29 +152,13 @@ msgctxt "#30131"
 msgid "Create M3U playlist"
 msgstr "Utwórz playliste M3U"
 
-msgctxt "#30132"
-msgid "Set filename and destination directory"
-msgstr "Ustaw nazwę pliku i katalog docelowy"
-
 msgctxt "#30133"
 msgid "Destination directory"
 msgstr "Katalog docelowy"
 
-msgctxt "#30134"
-msgid "Generate playlist"
-msgstr "Generuj playliste"
-
-msgctxt "#30135"
-msgid "Playlist M3U generated"
-msgstr "Wygenerowano playliste M3U"
-
 msgctxt "#30136"
 msgid "Under development"
 msgstr "W trakcie developerki"
-
-msgctxt "#30137"
-msgid "Porgram"
-msgstr "Program"
 
 msgctxt "#30138"
 msgid "TV Station Icon"
@@ -171,3 +171,23 @@ msgstr "Logo stacji TV"
 msgctxt "#30140"
 msgid "Current Program icon"
 msgstr "Ikona bieżącego programu"
+
+msgctxt "#30141"
+msgid "InputStream"
+msgstr ""
+
+msgctxt "#30142"
+msgid "InputStream Adaptive Settings"
+msgstr "Ustawienia InputStream Adaptive"
+
+msgctxt "#30143"
+msgid "InputStream Helper Settings"
+msgstr "Ustawienia InputStream Helper"
+
+msgctxt "#30144"
+msgid "DEV Zone (don't use)"
+msgstr "Strefa DEV (nie używać)"
+
+msgctxt "#30145"
+msgid "Login"
+msgstr "Logowanie"

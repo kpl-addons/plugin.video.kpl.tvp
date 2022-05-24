@@ -2,7 +2,7 @@
 	<section id="plugin.video.kpl.tvp">
 
 		<category id="tvp_main" label="30103" help="">
-			<group id="11">
+			<group id="11" label="30145">
 				<setting id="nothing" label="30126" type="boolean">
 					<level>0</level>
 					<default>false</default>
@@ -65,20 +65,36 @@
 		</category>
 
 		<category id="tvp_devmain" label="30110" help="">
-			<group id="91">
+			<group id="90" label="30141">
+				<setting id="isa_settings" type="action" label="30142">
+                    <level>2</level>
+                    <data>Addon.OpenSettings(inputstream.adaptive)</data>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
+                </setting>
+                <setting id="ish_settings" type="action" label="30143">
+                    <level>2</level>
+                    <data>Addon.OpenSettings(script.module.inputstreamhelper)</data>
+                    <control type="button" format="action">
+                        <close>true</close>
+                    </control>
+                </setting>
+			</group>
+			<group id="91" label="30144">
 				<setting id="developing" label="30136" type="boolean">
-					<level>0</level>
+					<level>3</level>
 					<default>false</default>
 					<visible>false</visible>
 					<control type="toggle" />
 				</setting>
 				<setting id="debugging" label="30111" type="boolean">
-					<level>0</level>
+					<level>3</level>
 					<default>false</default>
 					<control type="toggle" />
 				</setting>
 				<setting id="api_details" label="30112" type="boolean">
-					<level>0</level>
+					<level>3</level>
 					<default>false</default>
 					<control type="toggle" />
 				</setting>

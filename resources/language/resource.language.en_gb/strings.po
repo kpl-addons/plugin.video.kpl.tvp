@@ -12,18 +12,6 @@ msgstr ""
 "Content-Transfer-Encoding: 8bit\n"
 "Plural-Forms: nplurals=2; plural=(n != 1);\n"
 
-msgctxt "#30101"
-msgid "E-mail"
-msgstr ""
-
-msgctxt "#30102"
-msgid "Password"
-msgstr ""
-
-msgctxt "#30103"
-msgid "Main"
-msgstr ""
-
 msgctxt "#30104"
 msgid "API Tree"
 msgstr ""
@@ -46,18 +34,6 @@ msgstr ""
 
 msgctxt "#30109"
 msgid "TV (drzewo)"
-msgstr ""
-
-msgctxt "#30110"
-msgid "Dev Area"
-msgstr ""
-
-msgctxt "#30111"
-msgid "Debugging"
-msgstr ""
-
-msgctxt "#30112"
-msgid "Extra details"
 msgstr ""
 
 msgctxt "#30113"
@@ -104,6 +80,46 @@ msgctxt "#30123"
 msgid "Live TV"
 msgstr ""
 
+msgctxt "#30132"
+msgid "Set filename and destination directory"
+msgstr ""
+
+msgctxt "#30134"
+msgid "Generate playlist"
+msgstr ""
+
+msgctxt "#30135"
+msgid "Playlist M3U generated"
+msgstr ""
+
+msgctxt "#30137"
+msgid "Porgram"
+msgstr ""
+
+msgctxt "#30101"
+msgid "E-mail"
+msgstr ""
+
+msgctxt "#30102"
+msgid "Password"
+msgstr ""
+
+msgctxt "#30103"
+msgid "Main"
+msgstr ""
+
+msgctxt "#30110"
+msgid "Advanced"
+msgstr ""
+
+msgctxt "#30111"
+msgid "Debugging"
+msgstr ""
+
+msgctxt "#30112"
+msgid "Extra details"
+msgstr ""
+
 msgctxt "#30124"
 msgid "Transmission layout"
 msgstr ""
@@ -136,28 +152,12 @@ msgctxt "#30131"
 msgid "Create M3U playlist"
 msgstr ""
 
-msgctxt "#30132"
-msgid "Set filename and destination directory"
-msgstr ""
-
 msgctxt "#30133"
 msgid "Destination directory"
 msgstr ""
 
-msgctxt "#30134"
-msgid "Generate playlist"
-msgstr ""
-
-msgctxt "#30135"
-msgid "Playlist M3U generated"
-msgstr ""
-
 msgctxt "#30136"
 msgid "Under development"
-msgstr ""
-
-msgctxt "#30137"
-msgid "Porgram"
 msgstr ""
 
 msgctxt "#30138"
@@ -170,4 +170,24 @@ msgstr ""
 
 msgctxt "#30140"
 msgid "Current Program icon"
+msgstr ""
+
+msgctxt "#30141"
+msgid "InputStream"
+msgstr ""
+
+msgctxt "#30142"
+msgid "InputStream Adaptive Settings"
+msgstr ""
+
+msgctxt "#30143"
+msgid "InputStream Helper Settings"
+msgstr ""
+
+msgctxt "#30144"
+msgid "DEV Zone (don't use)"
+msgstr ""
+
+msgctxt "#30145"
+msgid "Login"
 msgstr ""
