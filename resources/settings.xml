@@ -67,19 +67,19 @@
 		<category id="tvp_devmain" label="30110" help="">
 			<group id="90" label="30141">
 				<setting id="isa_settings" type="action" label="30142">
-                    <level>2</level>
-                    <data>Addon.OpenSettings(inputstream.adaptive)</data>
-                    <control type="button" format="action">
-                        <close>true</close>
-                    </control>
-                </setting>
-                <setting id="ish_settings" type="action" label="30143">
-                    <level>2</level>
-                    <data>Addon.OpenSettings(script.module.inputstreamhelper)</data>
-                    <control type="button" format="action">
-                        <close>true</close>
-                    </control>
-                </setting>
+					<level>2</level>
+					<data>Addon.OpenSettings(inputstream.adaptive)</data>
+					<control type="button" format="action">
+						<close>true</close>
+					</control>
+				</setting>
+				<setting id="ish_settings" type="action" label="30143">
+					<level>2</level>
+					<data>Addon.OpenSettings(script.module.inputstreamhelper)</data>
+					<control type="button" format="action">
+						<close>true</close>
+					</control>
+				</setting>
 			</group>
 			<group id="91" label="30144">
 				<setting id="developing" label="30136" type="boolean">
