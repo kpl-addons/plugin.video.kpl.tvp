@@ -296,6 +296,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(title=L(30105, 'TV'), items=[
             Menu(call='tv'),
+            Menu(title=L(30137, 'Program'), call=call('tv', program=True)),
             Menu(call='replay_list'),
         ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
@@ -497,7 +498,7 @@ class TvpPlugin(Plugin):
             yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'), epg=epgs.get(code))
 
     @entry(title=L(30123, 'Live TV'))
-    def tv(self):
+    def tv(self, program=False):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
         with self.directory() as kdir:
@@ -528,7 +529,10 @@ class TvpPlugin(Plugin):
                         image = self._item_image(eprog, eprog.get('cycle'), default=image)
                 if self.settings.debugging:
                     title += f' [COLOR gray][{ch.code}][/COLOR]'
-                kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
+                if program:
+                    kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'), image=image, **kwargs)
+                else:
+                    kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
 
     @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
