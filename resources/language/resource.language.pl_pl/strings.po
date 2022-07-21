@@ -174,7 +174,7 @@ msgstr "Ikona bieżącego programu"
 
 msgctxt "#30141"
 msgid "InputStream"
-msgstr ""
+msgstr "InputStream"
 
 msgctxt "#30142"
 msgid "InputStream Adaptive Settings"
@@ -191,3 +191,47 @@ msgstr "Strefa DEV (nie używać)"
 msgctxt "#30145"
 msgid "Login"
 msgstr "Logowanie"
+
+msgctxt "#30146"
+msgid "TV list format"
+msgstr "Format listy TV"
+
+msgctxt "#30147"
+msgid "Custom format. Use {channel}, {prog}, {times}, {start}, {date}."
+msgstr "Format użytkownika. Używaj {channel}, {prog}, {title}, {times}, {start}, {date}."
+
+msgctxt "#30148"
+msgid "Custom"
+msgstr "Użytkownika"
+
+msgctxt "#30149"
+msgid "[HH:MM-HH-MM] TV – PROGRAM"
+msgstr "[HH:MM-HH-MM] TV – PROGRAM"
+
+msgctxt "#30150"
+msgid "TV [HH:MM-HH-MM] – PROGRAM"
+msgstr "TV [HH:MM-HH-MM] – PROGRAM"
+
+msgctxt "#30151"
+msgid "TV – PROGRAM  ||  [HH:MM-HH-MM]"
+msgstr "TV – PROGRAM  ||  [HH:MM-HH-MM]"
+
+msgctxt "#30152"
+msgid "TV list custom format"
+msgstr "Format użytkownika listy TV."
+
+msgctxt "#30153"
+msgid "Formatting"
+msgstr "Formatowanie"
+
+msgctxt "#30154"
+msgid "Time style"
+msgstr "Styl godzin"
+
+msgctxt "#30155"
+msgid "Channel style"
+msgstr "Styl kanału"
+
+msgctxt "#30156"
+msgid "Program style"
+msgstr "Styl programu"

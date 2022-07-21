@@ -6,9 +6,7 @@ from libka.url import URL
 from libka.path import Path
 from libka.menu import Menu, MenuItems
 from libka.utils import html_json, html_json_iter
-from libka.format import safefmt
 from libka.tools import adict
-from libka.iter import pairnext
 from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
 from libka.search import search, Search
@@ -20,7 +18,6 @@ from html import unescape
 from datetime import datetime, timedelta
 import re
 from enum import IntEnum
-import requests  # onlu for status code ok
 import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
 import xbmcvfs  # for file in m3u generator
@@ -51,6 +48,23 @@ class TransmissionLayout(IntEnum):
 class TvIconType(IntEnum):
     TvLogo = 0
     EpgIcon = 1
+
+
+class TvEntryFormat(IntEnum):
+    Custom = 0
+    TIME_CHAN_TITLE = 1
+    CHAN_TIME_TITLE = 2
+    CHAN_TITLE_TIME = 3
+
+    def formats():
+        return {
+            TvEntryFormat.TIME_CHAN_TITLE: '{prog.times} {channel.name} – {prog.title}',
+            TvEntryFormat.CHAN_TIME_TITLE: '{channel.name} {prog.times} – {prog.title}',
+            TvEntryFormat.CHAN_TITLE_TIME: '{channel.name} – {prog.title}||{prog.times}',
+        }
+
+    def get(num, default='{prog.times} {channel.name} – {prog.title}'):
+        return TvEntryFormat.formats().get(TvEntryFormat(num), default)
 
 
 def remove_tags(text):
@@ -102,6 +116,7 @@ Stream = namedtuple('Stream', 'url proto mime')
 EuVideo = namedtuple('EuVideo', 'width height rate url')
 
 ChannelInfo = namedtuple('ChannelInfo', 'code name image id epg', defaults=(None,))
+ChannelInfo.__str__ = lambda self: self.name
 
 
 class Info(namedtuple('Info', 'data type url title image descr series linkid')):
@@ -152,6 +167,9 @@ class ChannelEpg(UserList):
             self._next = prog
         return self._next
 
+    def __str__(self):
+        return str(self.current or '')
+
 
 class ChannelProgram(UserDict):
     """Single EPG program for a station."""
@@ -167,11 +185,18 @@ class ChannelProgram(UserDict):
         self.descr = f'[B]{self.title}[/B][CR]{self.start:%Y-%m-%d %H:%M}-{self.end:%H:%M}[CR]{self.plot}'
         self.times = f'{self.start:%H:%M}-{self.end:%H:%M}'
 
+    @property
+    def date(self):
+        return self.start
+
     def __getattr__(self, key):
         try:
             return self[key]
         except KeyError:
             raise AttributeError(key)
+
+    def __str__(self):
+        return self.title
 
 
 class TvpVodSite(Site):
@@ -340,6 +365,29 @@ class TvpPlugin(Plugin):
         super().__init__()
         self.site = TvpSite()
         self.colors['spec'] = 'gold'
+        self.formatter.default_formats.update({
+            'prog.date': '%Y.%m.%d',
+            'prog.start': '%H:%M',
+            'prog.end': '%H:%M',
+            'date': '%Y.%m.%d',
+            'start': '%H:%M',
+            'end': '%H:%M',
+        })
+        styles = self.settings.get_styles('tvp_time', 'tvp_chan', 'tvp_prog')
+        self.styles.update({
+            'prog.times': styles.tvp_time,
+            'prog.start': styles.tvp_time,
+            'prog.end': styles.tvp_time,
+            'prog.date': styles.tvp_time,
+            'times': styles.tvp_time,
+            'start': styles.tvp_time,
+            'end': styles.tvp_time,
+            'date': styles.tvp_time,
+            'channel': styles.tvp_chan,
+            'tv': styles.tvp_chan,
+            'prog.title': styles.tvp_prog,
+            'title': styles.tvp_prog,
+        })
         self.vod_search = Search(addon=self, site=self.site, name='vod', method=self.vod_search_folder)
 
     def home(self):
@@ -373,6 +421,11 @@ class TvpPlugin(Plugin):
 
     def menu_entry_item(self, *, kdir, entry, item, index_path):
         return self._item(kdir, item)
+
+    def fmt(self, format, **kwargs):
+        """ Format title (label) using styles. Split `label2` on `||`."""
+        label, _, label2 = self.formatter.format(format, **kwargs).partition('||')
+        return label, label2 or None
 
     def listing(self, id: PathArg[int], page=None, type=None):
         """Use api.v3.tvp.pl JSON listing."""
@@ -445,7 +498,7 @@ class TvpPlugin(Plugin):
                                 pass
                     for item in items:
                         iid = item.get('asset_id')
-                        if iid in con.a:
+                        if iid in con.a and con.a[iid]:
                             item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
                                               if it.get('object_type') == 'video' and it.get('playable')]
 
@@ -500,13 +553,19 @@ class TvpPlugin(Plugin):
     def tv(self):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
+        title_format = TvEntryFormat.get(self.settings.tv_entry_format, self.settings.tv_entry_custom_format)
         with self.directory() as kdir:
             for ch in self.channel_iter_stations(epg=True):
                 kwargs = {}
                 title, image = ch.name, ch.image
                 if ch.epg and ch.epg.current:
                     channel, prog = ch, ch.epg.current
-                    title = f'[{prog.times}] {channel.name} – {prog.title}'
+                    # title = f'[{prog.times}] {channel.name} – {prog.title}'
+                    title, label2 = self.fmt(title_format, prog=prog, channel=channel, tv=channel.name,
+                                             title=prog.title, times=prog.times, start=prog.start, end=prog.end,
+                                             date=prog.date)
+                    if label2:
+                        kwargs['label2'] = label2
                     plot = f'[B]{ch.epg.current.title}[/B][CR]{ch.epg.current.outline}'
                     descr = ch.epg.current.descr
                     if ch.epg.next:
@@ -514,7 +573,7 @@ class TvpPlugin(Plugin):
                         plot += extra
                         descr += extra
                     kwargs['info'] = {
-                        'outline': ch.epg.current.outline,
+                        # 'outline': ch.epg.current.outline,
                         'plotoutline': plot,
                         'plot': descr,
                     }
@@ -523,6 +582,8 @@ class TvpPlugin(Plugin):
                          self.cmd.Container.Update(call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'))),
                         (L(30115, 'Archive'), self.cmd.Container.Update(call(self.replay_channel, ch.code))),
                     ]
+                    if self.settings.developing or self.settings.debugging:
+                        kwargs['menu'].insert(0, ('!!!', self.exception))
                     if self.settings.tv_icon_type == TvIconType.EpgIcon:
                         eprog = prog.get('program') or {}
                         image = self._item_image(eprog, eprog.get('cycle'), default=image)
@@ -651,17 +712,18 @@ class TvpPlugin(Plugin):
                     pid = prog['record_id']
                     eprog = prog.get('program', {})
                     img = self._item_image(eprog, eprog.get('cycle'))
-                    title = f'[{prog.times}] {prog.title}'
+                    title, label2 = self.fmt('{prog.times} {prog.title}', prog=prog)
                     info = {
                         'outline': prog.outline,
                         'plotoutline': f'[B]{prog.title}[/B][CR]{prog.outline}',
                         'plot': prog.descr,
                     }
                     if archive:
-                        kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, info=info)
+                        kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, info=info,
+                                  label2=label2)
                     else:
                         title = f'[I]{title}[/I]'
-                        kdir.item(title, self.no_operation, image=img, info=info)
+                        kdir.item(title, self.no_operation, image=img, info=info, label2=label2)
 
     def _epg_item(self, kdir, item, *, code=None, now=None):
         if now is None:
