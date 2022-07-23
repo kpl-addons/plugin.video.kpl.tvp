@@ -373,6 +373,7 @@ class TvpPlugin(Plugin):
             'date': '%Y.%m.%d',
             'start': '%H:%M',
             'end': '%H:%M',
+            'trans.time': {'one_day': '%H:%M', 'another_day': '%Y.%m.%d %H:%M'},
         })
         styles = self.settings.get_styles('tvp_time', 'tvp_chan', 'tvp_prog')
         self.styles.update({
@@ -388,6 +389,14 @@ class TvpPlugin(Plugin):
             'tv': styles.tvp_chan,
             'prog.title': styles.tvp_prog,
             'title': styles.tvp_prog,
+            # TODO: add to settings
+            'trans.sep': 'COLOR gray;I'.split(';'),
+            'trans.time': {
+                None: '[]'.split(';'),
+                'future': 'COLOR gray;[]'.split(';'),
+                'finished': 'COLOR red;[]'.split(';'),
+            },
+            'folder_list_separator': ['COLOR khaki', 'B', 'I'],
         })
         self.vod_search = Search(addon=self, site=self.site, name='vod', method=self.vod_search_folder)
 
@@ -899,17 +908,25 @@ class TvpPlugin(Plugin):
         if start and end:
             if end + self.site.dT > now:
                 future = start > now
+                time = start + self.tz_offset
+                # date-time format condition
                 if single_day or start.date() == now.date() or start + timedelta(hours=6) < now:
                     # the same day or next 6h: only HH:MM
-                    time = f'[{start + self.tz_offset:%H:%M}]'
+                    day_cond = 'one_day'
                 else:
                     # more then 6h: yyyy.mm.dd HH:MM
-                    time = f'[{start + self.tz_offset:%Y.%m.%d %H:%M}]'
+                    day_cond = 'another_day'
+                # date-time style condition
                 if future:
-                    time = self.format_title(time, ['COLOR gray'])
-                elif end < now:
-                    time = self.format_title(time, ['COLOR red'])  # transmisja powinna być zakończona, do 5min
-                title = f'{time} {title}'
+                    time_cond = 'future'
+                elif end < now:  # transmisja powinna być zakończona, do 5min
+                    time_cond = 'finished'
+                else:
+                    time_cond = 'current'
+                # TIME - TITLE,  !? - format cond name, !$ - style cond name
+                title, label2 = self.fmt('{trans.time:!?day_cond!$time_cond} {trans.title}',
+                                         trans={'title': title, 'time': time},
+                                         time_cond=time_cond, day_cond=day_cond)
         elif start and start > now:
             if item.get('paymethod') and self.settings.email and self.settings.password:
                 prefix = self.format_title('[P]', ['COLOR gold'])
