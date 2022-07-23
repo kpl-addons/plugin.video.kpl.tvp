@@ -308,7 +308,7 @@ class TvpSite(Site):
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
 
-    MENU = Menu(order_key='title', items=[
+    MENU = Menu(order_key='title', view='addons', items=[
         Menu(title='Tests', when='debugging', items=[
             Menu(title=L(30104, 'API Tree'), id=2),
             Menu(title=L(30113, 'VoD'), id=1785454),
@@ -321,7 +321,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(title=L(30105, 'TV'), items=[
             Menu(call='tv'),
-            Menu(title=L(30137, 'Program'), call=call('tv', program=True)),
+            Menu(call='tv_program'),
             Menu(call='replay_list'),
         ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
@@ -550,14 +550,19 @@ class TvpPlugin(Plugin):
             name, code = item['name'], item.get('code', '')
             yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'), epg=epgs.get(code))
 
+    @entry(title=L(30137, 'Program'))
+    def tv_program(self):
+        self.tv(program=True)
+
     @entry(title=L(30123, 'Live TV'))
-    def tv(self, program=False):
+    def tv(self, *, program=False):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
         title_format = TvEntryFormat.get(self.settings.tv_entry_format, self.settings.tv_entry_custom_format)
         with self.directory() as kdir:
             for ch in self.channel_iter_stations(epg=True):
                 kwargs = {}
+                prog = None
                 title, image = ch.name, ch.image
                 if ch.epg and ch.epg.current:
                     channel, prog = ch, ch.epg.current
@@ -591,7 +596,9 @@ class TvpPlugin(Plugin):
                 if self.settings.debugging:
                     title += f' [COLOR gray][{ch.code}][/COLOR]'
                 if program:
-                    kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'), image=image, **kwargs)
+                    if prog:
+                        kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'),
+                                  image=image, **kwargs)
                 else:
                     kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
 
@@ -771,7 +778,8 @@ class TvpPlugin(Plugin):
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
         if data:
-            stream = self.get_stream_of_type(self.site.jget(data['stream_url']).get('formats') or (), end=True)
+            # end= doens't work anymore, Mariusz thans
+            stream = self.get_stream_of_type(self.site.jget(data['stream_url']).get('formats') or (), end=False)
             self._play(stream)
 
     def _play(self, stream):
@@ -872,6 +880,7 @@ class TvpPlugin(Plugin):
         playable = item.get('playlable')
         details = item.get('DETAILS', {})
         style = None
+        label2 = None
         # format title
         if title is None:
             title = item.get('title', item.get('name', f'#{iid}'))
@@ -949,7 +958,8 @@ class TvpPlugin(Plugin):
         position = 'top' if itype == 'directory_toplist' else None
         if position and not style:
             style = ['COLOR :spec', 'B']
-        kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu, style=style)
+        kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu, style=style,
+                      label2=label2)
         if itype in ('video', 'epg_item'):
             # if 'virtual_channel_id' in item:
             #     iid = item['virtual_channel_id']
@@ -1348,7 +1358,7 @@ class TvpPlugin(Plugin):
                     if st['mimeType'] == mime:
                         url = URL(st['url'])
                         if end and 'end' not in url.query:
-                            url = url % {'end': ''}
+                            url = url % {'end': end or ''}
                         yield Stream(url=url, proto=stype.proto, mime=stype.mime)
 
     @staticmethod
