@@ -4,6 +4,7 @@
 		<category id="tvp_main" label="30103" help="">
 			<group id="11" label="30145">
 				<setting id="script" type="string" label="30126" help="">
+					<visible>false</visible>
 					<level>0</level>
 					<default>— — —</default>
 					<constraints>
@@ -14,6 +15,7 @@
 					</control>
 				</setting>
 				<setting id="nothing" label="30126" type="boolean">
+					<visible>false</visible>
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle" />
@@ -208,6 +210,7 @@
 				<setting id="debugging" label="30111" type="boolean">
 					<level>3</level>
 					<default>false</default>
+					<visible>false</visible>
 					<control type="toggle" />
 				</setting>
 				<setting id="api_details" label="30112" type="boolean">
