@@ -1169,7 +1169,7 @@ class TvpPlugin(Plugin):
             log(f'free video: {id}', title='TVP')
             stream = Stream(stream_url, '', '')
             if 'formats' in resp:
-                stream = self.get_stream_of_type(resp['formats'], end=False)
+                stream = self.get_stream_of_type(resp['formats'])
                 if stream_url is not None:
                     if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                             and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
@@ -1354,7 +1354,7 @@ class TvpPlugin(Plugin):
                     kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
     @staticmethod
-    def iter_stream_of_type(streams, *, end=False):
+    def iter_stream_of_type(streams):
         mime_types = {
             'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
             'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
@@ -1379,8 +1379,8 @@ class TvpPlugin(Plugin):
                         yield Stream(url=url, proto=stype.proto, mime=stype.mime)
 
     @staticmethod
-    def get_stream_of_type(streams, *, end=False):
-        for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
+    def get_stream_of_type(streams):
+        for stream in TvpPlugin.iter_stream_of_type(streams):
             return stream
 
     def exception(self):

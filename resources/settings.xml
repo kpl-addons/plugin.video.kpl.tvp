@@ -161,6 +161,7 @@
 			</group>
 			<group id="23">
 				<setting id="tvp_xxx" type="action" label="30142" help="">
+					<visible>false</visible>
 					<level>0</level>
 					<data>RunScript(script.module.libka,efg,y=44)</data>
 					<constraints>
@@ -171,6 +172,7 @@
 					</control>
 				</setting>
 				<setting id="tvp_yyy" type="action" label="30143" help="">
+					<visible>false</visible>
 					<level>0</level>
 					<data>RunScript($ID,ss)</data>
 					<constraints>
