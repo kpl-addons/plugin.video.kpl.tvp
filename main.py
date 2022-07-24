@@ -1354,7 +1354,7 @@ class TvpPlugin(Plugin):
                     kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
     @staticmethod
-    def iter_stream_of_type(streams):
+    def iter_stream_of_type(streams, *, end=False):
         mime_types = {
             'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
             'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
@@ -1379,8 +1379,8 @@ class TvpPlugin(Plugin):
                         yield Stream(url=url, proto=stype.proto, mime=stype.mime)
 
     @staticmethod
-    def get_stream_of_type(streams):
-        for stream in TvpPlugin.iter_stream_of_type(streams):
+    def get_stream_of_type(streams, *, end=False):
+        for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
             return stream
 
     def exception(self):
