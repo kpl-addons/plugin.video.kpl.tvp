@@ -13,6 +13,7 @@ from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
 from libka.search import search, Search
 from pdom import select as dom_select
+from urllib.parse import urlencode, urlparse, parse_qs
 import json
 from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
@@ -41,6 +42,7 @@ UNLIMITED = object()
 Future = object()
 CurrentAndFuture = object()
 
+KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -261,7 +263,12 @@ class TvpSite(Site):
     def station_streams(self, station_code, record_id):
         data = self.station_program(station_code=station_code, record_id=record_id)
         url = data.get('data', {}).get('stream_url')
-        return self.jget(url).get('formats')
+
+        redir = self.jget(url)
+        formats = redir.get('formats')
+        mimetype = redir.get('mimeType')
+
+        return formats, mimetype
 
     def blackburst(self, parent_id, *, dump='json', direct=False, type='video', nocount=1, copy=False,
                    filter={'playable': True}, order='release_date_long,-1', release_date=None, **kwargs):
@@ -700,16 +707,51 @@ class TvpPlugin(Plugin):
         ...
 
     def play_program(self, code, prog):
-        streams = self.site.station_streams(code, prog)
+        streams, mimetype = self.site.station_streams(code, prog)
         if streams:
-            stream = self.get_stream_of_type(streams)
+            stream = self.get_stream_of_type(streams, mimetype=mimetype)
             self._play(stream)
 
     def station(self, code: PathArg):
-        data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
-                              params={'station_code': code}).get('data')
+        date = datetime.today()
+        program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index', params={'station_code': code, 'date': date}).get('data')
+
+        if program:
+            now = int(datetime.now().timestamp() * 1000)
+            begin_ts, end_ts = [(item['date_start'], item['date_end']) for item in program if now >= item['date_start'] and now <= item['date_end']][0]
+
+            begin_date = datetime.fromtimestamp(int(begin_ts) // 1000) - timedelta(hours=2)
+            end_date = datetime.fromtimestamp(int(end_ts) // 1000) - timedelta(hours=2)
+
+            begin_date = begin_date.strftime('%Y%m%dT%H%M%S')
+            end_date = end_date.strftime('%Y%m%dT%H%M%S')
+
+            begin_tag = begin_date
+            end_tag = end_date
+        else:
+            begin_tag = None
+            end_tag = None
+
+        data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data', params={'station_code': code}).get('data')
         if data:
-            stream = self.get_stream_of_type(self.site.jget(data['stream_url']).get('formats') or ())
+            redir = self.site.jget(data['stream_url'])
+            formats = redir.get('formats')
+
+            live = redir.get('live')
+            if live:
+                live_tag = 'true'
+            else:
+                live_tag = 'false'
+
+            timeshift = redir.get('timeShift')
+            if timeshift:
+                timeshift_tag = 'true'
+            else:
+                timeshift_tag = 'false'
+
+            mimetype = redir.get('mimeType')
+
+            stream = self.get_stream_of_type(formats or (), begin=begin_tag, end=end_tag, live=live_tag, timeshift=timeshift_tag, mimetype=mimetype)
             self._play(stream)
 
     def _play(self, stream):
@@ -724,6 +766,11 @@ class TvpPlugin(Plugin):
             play_item.setProperty('inputstream', is_helper.inputstream_addon)
             play_item.setProperty("IsPlayable", "true")
             play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
+            play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
+            if KODI_VERSION >= 20:
+                play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+            if not 'live=true' in stream.url:
+                play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
             xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
 
     def _item_start_time(self, item):
@@ -1067,10 +1114,10 @@ class TvpPlugin(Plugin):
 
                                             return
                                 else:  # non-DRM
-                                    for f in d['formats']:
-                                        if f['mimeType'] == 'application/x-mpegurl':
-                                            stream_url = f['url']
-                                            break
+                                    streams = d['formats']
+                                    streams_ = [d for d in streams if mimetype == d['mimeType']]
+                                    stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
+
                                     play_item = xbmcgui.ListItem(path=stream_url)
                                     play_item.setProperty('IsPlayable', 'true')
                                     play_item.setSubtitles(subt)
@@ -1080,7 +1127,7 @@ class TvpPlugin(Plugin):
             log(f'free video: {id}', title='TVP')
             stream = Stream(stream_url, '', '')
             if 'formats' in resp:
-                stream = self.get_stream_of_type(resp['formats'])
+                stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'])
                 if stream_url is not None:
                     if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                             and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
@@ -1265,31 +1312,52 @@ class TvpPlugin(Plugin):
                     kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
     @staticmethod
-    def iter_stream_of_type(streams):
-        mime_types = {
-            'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
-            'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
-            'video/mp2t':            StreamType('hls', 'application/x-mpegURL'),
-            'application/dash+xml':  StreamType('mpd', 'application/dash+xml'),
-            'application/x-mpegurl': StreamType('hls', 'application/x-mpegURL'),
-        }
+    def iter_stream_of_type(streams, *, begin, end, live, timeshift, mimetype):
+        streams_ = [d for d in streams if mimetype == d['mimeType']]
+        if not streams_:
+            streams_ = streams
 
-        for st in streams:
-            for prio, mime in enumerate(mime_types):
-                if st['mimeType'] == mime:
-                    st['priority'] = prio
+        stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
 
-        streams = sorted(streams, key=lambda d: ((d['priority']), -int(d['totalBitrate'])), reverse=True)
-        for st in streams:
-            if 'material_niedostepny' not in st['url']:
-                for mime, stype in mime_types.items():
-                    if st['mimeType'] == mime:
-                        url = URL(st['url'])
-                        yield Stream(url=url, proto=stype.proto, mime=stype.mime)
+        if mimetype == 'application/dash+xml':
+            protocol = 'mpd'
+        elif mimetype == 'application/vnd.ms-ss':
+            protocol = 'ism'
+        else:
+            protocol = 'hls'
+
+        if 'material_niedostepny' not in stream:
+            url = stream['url']
+            params = {}
+            if begin:
+                tag = '?begin='
+                if 'begin=' in url:
+                    begin = re.sub(r'^\?begin=\d+T\d+', tag + begin, url)
+
+            if end and 'end=' not in url:
+                if 'begin=' in url:
+                    params.update({'end': end})
+
+            if live and 'live=' not in url:
+                params.update({'live': live})
+
+            if timeshift and 'timeshift=' not in url:
+                params.update({'timeshift': timeshift})
+
+            parsed_url = urlparse(url)
+            parsed_query = parse_qs(parsed_url.query)
+            if parsed_query:
+                start_tag = '&'
+            else:
+                start_tag = '?'
+
+            url_ = URL(url + start_tag + urlencode(params))
+
+            yield Stream(url=url_, proto=protocol, mime=stream['mimeType'])
 
     @staticmethod
-    def get_stream_of_type(streams):
-        for stream in TvpPlugin.iter_stream_of_type(streams):
+    def get_stream_of_type(streams, *, begin=None, end=None, live=False, timeshift=False, mimetype=None):
+        for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype):
             return stream
 
     def exception(self):
