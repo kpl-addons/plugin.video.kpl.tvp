@@ -1404,15 +1404,6 @@ class TvpPlugin(Plugin):
         streams_ = [d for d in streams if mimetype == d['mimeType']]
         if not streams_:
             streams_ = streams
-    def iter_stream_of_type(streams, *, end=False):
-        mime_types = {
-            'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
-            'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
-            'video/mp2t':            StreamType('hls', 'application/x-mpegURL'),
-            'application/dash+xml':  StreamType('mpd', 'application/dash+xml'),
-            'application/x-mpegurl': StreamType('hls', 'application/x-mpegURL'),
-        }
-        stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
 
         if mimetype == 'application/dash+xml':
             protocol = 'mpd'
@@ -1421,8 +1412,8 @@ class TvpPlugin(Plugin):
         else:
             protocol = 'hls'
 
-        if 'material_niedostepny' not in stream:
-            url = stream['url']
+        if 'material_niedostepny' not in streams_:
+            url = streams_[0]['url']
             params = {}
             if begin:
                 tag = '?begin='
@@ -1448,24 +1439,12 @@ class TvpPlugin(Plugin):
 
             url_ = URL(url + start_tag + urlencode(params))
 
-            yield Stream(url=url_, proto=protocol, mime=stream['mimeType'])
+            yield Stream(url=url_, proto=protocol, mime=mimetype)
 
     @staticmethod
     def get_stream_of_type(streams, *, begin=None, end=None, live=False, timeshift=False, mimetype=None):
-        for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype):
-        streams = sorted(streams, key=lambda d: ((d['priority']), -int(d['totalBitrate'])), reverse=True)
-        for st in streams:
-            if 'material_niedostepny' not in st['url']:
-                for mime, stype in mime_types.items():
-                    if st['mimeType'] == mime:
-                        url = URL(st['url'])
-                        if end and 'end' not in url.query:
-                            url = url % {'end': end or ''}
-                        yield Stream(url=url, proto=stype.proto, mime=stype.mime)
-
-    @staticmethod
-    def get_stream_of_type(streams, *, end=False):
-        for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
+        for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
+                                                    mimetype=mimetype):
             return stream
 
     def exception(self):
