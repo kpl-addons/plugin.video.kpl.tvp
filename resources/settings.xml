@@ -3,7 +3,19 @@
 
 		<category id="tvp_main" label="30103" help="">
 			<group id="11" label="30145">
+				<setting id="script" type="string" label="30126" help="">
+					<visible>false</visible>
+					<level>0</level>
+					<default>— — —</default>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<data>RunScript(plugin.video.kpl.tvp,ss,tvp_chan)</data>
+					</control>
+				</setting>
 				<setting id="nothing" label="30126" type="boolean">
+					<visible>false</visible>
 					<level>0</level>
 					<default>false</default>
 					<control type="toggle" />
@@ -62,6 +74,115 @@
 					</control>
 				</setting>
 			</group>
+			<group id="22" label="30153">
+				<setting id="tv_entry_format" type="integer" label="30146" help="">
+					<level>0</level>
+					<default>1</default>
+					<constraints>
+						<options>
+							<option label="30148">0</option>
+							<option label="30149">1</option>
+							<option label="30150">2</option>
+							<option label="30151">3</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30146</heading>
+					</control>
+				</setting>
+				<setting id="tv_entry_custom_format" type="string" label="30152" help="30147">
+					<level>0</level>
+					<default>{times} {channel} – {title}</default>
+					<constraints>
+						<allowempty>false</allowempty>
+					</constraints>
+					<dependencies>
+						<dependency type="enable" setting="tv_entry_format">0</dependency>
+						<dependency type="visible" setting="tv_entry_format">0</dependency>
+					</dependencies>
+					<control type="edit" format="string">
+						<heading>30147</heading>
+					</control>
+				</setting>
+				<setting id="tvp_time_style_preview" type="string" label="30154" help="">
+					<level>0</level>
+					<default>[COLOR gray][ABC][/COLOR]</default>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<data>RunScript($ID,colorpicker,addon=$ID,settings=tvp_time_style)</data>
+					</control>
+				</setting>
+				<setting id="tvp_time_style_value" type="string" label="30154" help="">
+					<visible>false</visible>
+					<default>COLOR gray;[]</default>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string" />
+				</setting>
+				<setting id="tvp_chan_style_preview" type="string" label="30155" help="">
+					<level>0</level>
+					<default>[COLOR gold][B]ABC[/B][/COLOR]</default>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<data>RunScript($ID,colorpicker,addon=$ID,settings=tvp_chan_style)</data>
+					</control>
+				</setting>
+				<setting id="tvp_chan_style_value" type="string" label="30155" help="">
+					<visible>false</visible>
+					<default>COLOR gold;B</default>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string" />
+				</setting>
+				<setting id="tvp_prog_style_preview" type="string" label="30156" help="">
+					<level>0</level>
+					<default>ABC</default>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<data>RunScript($ID,colorpicker,addon=$ID,settings=tvp_prog_style)</data>
+					</control>
+				</setting>
+				<setting id="tvp_prog_style_value" type="string" label="30156" help="">
+					<visible>false</visible>
+					<default />
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="edit" format="string" />
+				</setting>
+			</group>
+			<group id="23">
+				<setting id="tvp_xxx" type="action" label="30142" help="">
+					<visible>false</visible>
+					<level>0</level>
+					<data>RunScript(script.module.libka,efg,y=44)</data>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<close>true</close>
+					</control>
+				</setting>
+				<setting id="tvp_yyy" type="action" label="30143" help="">
+					<visible>false</visible>
+					<level>0</level>
+					<data>RunScript($ID,ss)</data>
+					<constraints>
+						<allowempty>true</allowempty>
+					</constraints>
+					<control type="button" format="action">
+						<close>true</close>
+					</control>
+				</setting>
+			</group>
 		</category>
 
 		<category id="tvp_devmain" label="30110" help="">
@@ -91,6 +212,7 @@
 				<setting id="debugging" label="30111" type="boolean">
 					<level>3</level>
 					<default>false</default>
+					<visible>false</visible>
 					<control type="toggle" />
 				</setting>
 				<setting id="api_details" label="30112" type="boolean">

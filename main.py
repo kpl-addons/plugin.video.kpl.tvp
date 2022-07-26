@@ -6,9 +6,7 @@ from libka.url import URL
 from libka.path import Path
 from libka.menu import Menu, MenuItems
 from libka.utils import html_json, html_json_iter
-from libka.format import safefmt
 from libka.tools import adict
-from libka.iter import pairnext
 from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
 from libka.search import search, Search
@@ -21,7 +19,6 @@ from html import unescape
 from datetime import datetime, timedelta
 import re
 from enum import IntEnum
-import requests  # onlu for status code ok
 import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
 import xbmcvfs  # for file in m3u generator
@@ -53,6 +50,23 @@ class TransmissionLayout(IntEnum):
 class TvIconType(IntEnum):
     TvLogo = 0
     EpgIcon = 1
+
+
+class TvEntryFormat(IntEnum):
+    Custom = 0
+    TIME_CHAN_TITLE = 1
+    CHAN_TIME_TITLE = 2
+    CHAN_TITLE_TIME = 3
+
+    def formats():
+        return {
+            TvEntryFormat.TIME_CHAN_TITLE: '{prog.times} {channel.name} – {prog.title}',
+            TvEntryFormat.CHAN_TIME_TITLE: '{channel.name} {prog.times} – {prog.title}',
+            TvEntryFormat.CHAN_TITLE_TIME: '{channel.name} – {prog.title}||{prog.times}',
+        }
+
+    def get(num, default='{prog.times} {channel.name} – {prog.title}'):
+        return TvEntryFormat.formats().get(TvEntryFormat(num), default)
 
 
 def remove_tags(text):
@@ -104,6 +118,7 @@ Stream = namedtuple('Stream', 'url proto mime')
 EuVideo = namedtuple('EuVideo', 'width height rate url')
 
 ChannelInfo = namedtuple('ChannelInfo', 'code name image id epg', defaults=(None,))
+ChannelInfo.__str__ = lambda self: self.name
 
 
 class Info(namedtuple('Info', 'data type url title image descr series linkid')):
@@ -154,6 +169,9 @@ class ChannelEpg(UserList):
             self._next = prog
         return self._next
 
+    def __str__(self):
+        return str(self.current or '')
+
 
 class ChannelProgram(UserDict):
     """Single EPG program for a station."""
@@ -169,11 +187,18 @@ class ChannelProgram(UserDict):
         self.descr = f'[B]{self.title}[/B][CR]{self.start:%Y-%m-%d %H:%M}-{self.end:%H:%M}[CR]{self.plot}'
         self.times = f'{self.start:%H:%M}-{self.end:%H:%M}'
 
+    @property
+    def date(self):
+        return self.start
+
     def __getattr__(self, key):
         try:
             return self[key]
         except KeyError:
             raise AttributeError(key)
+
+    def __str__(self):
+        return self.title
 
 
 class TvpVodSite(Site):
@@ -290,7 +315,7 @@ class TvpSite(Site):
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
 
-    MENU = Menu(order_key='title', items=[
+    MENU = Menu(order_key='title', view='addons', items=[
         Menu(title='Tests', when='debugging', items=[
             Menu(title=L(30104, 'API Tree'), id=2),
             Menu(title=L(30113, 'VoD'), id=1785454),
@@ -303,7 +328,7 @@ class TvpPlugin(Plugin):
         ]),
         Menu(title=L(30105, 'TV'), items=[
             Menu(call='tv'),
-            Menu(title=L(30137, 'Program'), call=call('tv', program=True)),
+            Menu(call='tv_program'),
             Menu(call='replay_list'),
         ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
@@ -348,6 +373,38 @@ class TvpPlugin(Plugin):
         super().__init__()
         self.site = TvpSite()
         self.colors['spec'] = 'gold'
+        self.formatter.default_formats.update({
+            'prog.date': '%Y.%m.%d',
+            'prog.start': '%H:%M',
+            'prog.end': '%H:%M',
+            'date': '%Y.%m.%d',
+            'start': '%H:%M',
+            'end': '%H:%M',
+            'trans.time': {'one_day': '%H:%M', 'another_day': '%Y.%m.%d %H:%M'},
+        })
+        styles = self.settings.get_styles('tvp_time', 'tvp_chan', 'tvp_prog')
+        self.styles.update({
+            'prog.times': styles.tvp_time,
+            'prog.start': styles.tvp_time,
+            'prog.end': styles.tvp_time,
+            'prog.date': styles.tvp_time,
+            'times': styles.tvp_time,
+            'start': styles.tvp_time,
+            'end': styles.tvp_time,
+            'date': styles.tvp_time,
+            'channel': styles.tvp_chan,
+            'tv': styles.tvp_chan,
+            'prog.title': styles.tvp_prog,
+            'title': styles.tvp_prog,
+            # TODO: add to settings
+            'trans.sep': 'COLOR gray;I'.split(';'),
+            'trans.time': {
+                None: '[]'.split(';'),
+                'future': 'COLOR gray;[]'.split(';'),
+                'finished': 'COLOR red;[]'.split(';'),
+            },
+            'folder_list_separator': ['COLOR khaki', 'B', 'I'],
+        })
         self.vod_search = Search(addon=self, site=self.site, name='vod', method=self.vod_search_folder)
 
     def home(self):
@@ -381,6 +438,11 @@ class TvpPlugin(Plugin):
 
     def menu_entry_item(self, *, kdir, entry, item, index_path):
         return self._item(kdir, item)
+
+    def fmt(self, format, **kwargs):
+        """ Format title (label) using styles. Split `label2` on `||`."""
+        label, _, label2 = self.formatter.format(format, **kwargs).partition('||')
+        return label, label2 or None
 
     def listing(self, id: PathArg[int], page=None, type=None):
         """Use api.v3.tvp.pl JSON listing."""
@@ -453,7 +515,7 @@ class TvpPlugin(Plugin):
                                 pass
                     for item in items:
                         iid = item.get('asset_id')
-                        if iid in con.a:
+                        if iid in con.a and con.a[iid]:
                             item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
                                               if it.get('object_type') == 'video' and it.get('playable')]
 
@@ -504,17 +566,28 @@ class TvpPlugin(Plugin):
             name, code = item['name'], item.get('code', '')
             yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'), epg=epgs.get(code))
 
+    @entry(title=L(30137, 'Program'))
+    def tv_program(self):
+        self.tv(program=True)
+
     @entry(title=L(30123, 'Live TV'))
-    def tv(self, program=False):
+    def tv(self, *, program=False):
         """TV channel list."""
         # Regionalne: 38345166 → vortal → virtual_channel → live_video_id
+        title_format = TvEntryFormat.get(self.settings.tv_entry_format, self.settings.tv_entry_custom_format)
         with self.directory() as kdir:
             for ch in self.channel_iter_stations(epg=True):
                 kwargs = {}
+                prog = None
                 title, image = ch.name, ch.image
                 if ch.epg and ch.epg.current:
                     channel, prog = ch, ch.epg.current
-                    title = f'[{prog.times}] {channel.name} – {prog.title}'
+                    # title = f'[{prog.times}] {channel.name} – {prog.title}'
+                    title, label2 = self.fmt(title_format, prog=prog, channel=channel, tv=channel.name,
+                                             title=prog.title, times=prog.times, start=prog.start, end=prog.end,
+                                             date=prog.date)
+                    if label2:
+                        kwargs['label2'] = label2
                     plot = f'[B]{ch.epg.current.title}[/B][CR]{ch.epg.current.outline}'
                     descr = ch.epg.current.descr
                     if ch.epg.next:
@@ -522,7 +595,7 @@ class TvpPlugin(Plugin):
                         plot += extra
                         descr += extra
                     kwargs['info'] = {
-                        'outline': ch.epg.current.outline,
+                        # 'outline': ch.epg.current.outline,
                         'plotoutline': plot,
                         'plot': descr,
                     }
@@ -531,13 +604,17 @@ class TvpPlugin(Plugin):
                          self.cmd.Container.Update(call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'))),
                         (L(30115, 'Archive'), self.cmd.Container.Update(call(self.replay_channel, ch.code))),
                     ]
+                    if self.settings.developing or self.settings.debugging:
+                        kwargs['menu'].insert(0, ('!!!', self.exception))
                     if self.settings.tv_icon_type == TvIconType.EpgIcon:
                         eprog = prog.get('program') or {}
                         image = self._item_image(eprog, eprog.get('cycle'), default=image)
                 if self.settings.debugging:
                     title += f' [COLOR gray][{ch.code}][/COLOR]'
                 if program:
-                    kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'), image=image, **kwargs)
+                    if prog:
+                        kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'),
+                                  image=image, **kwargs)
                 else:
                     kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
 
@@ -662,17 +739,18 @@ class TvpPlugin(Plugin):
                     pid = prog['record_id']
                     eprog = prog.get('program', {})
                     img = self._item_image(eprog, eprog.get('cycle'))
-                    title = f'[{prog.times}] {prog.title}'
+                    title, label2 = self.fmt('{prog.times} {prog.title}', prog=prog)
                     info = {
                         'outline': prog.outline,
                         'plotoutline': f'[B]{prog.title}[/B][CR]{prog.outline}',
                         'plot': prog.descr,
                     }
                     if archive:
-                        kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, info=info)
+                        kdir.play(title, call(self.play_program, code=code, prog=pid), image=img, info=info,
+                                  label2=label2)
                     else:
                         title = f'[I]{title}[/I]'
-                        kdir.item(title, self.no_operation, image=img, info=info)
+                        kdir.item(title, self.no_operation, image=img, info=info, label2=label2)
 
     def _epg_item(self, kdir, item, *, code=None, now=None):
         if now is None:
@@ -857,6 +935,7 @@ class TvpPlugin(Plugin):
         playable = item.get('playlable')
         details = item.get('DETAILS', {})
         style = None
+        label2 = None
         # format title
         if title is None:
             title = item.get('title', item.get('name', f'#{iid}'))
@@ -875,17 +954,25 @@ class TvpPlugin(Plugin):
         if start and end:
             if end + self.site.dT > now:
                 future = start > now
+                time = start + self.tz_offset
+                # date-time format condition
                 if single_day or start.date() == now.date() or start + timedelta(hours=6) < now:
                     # the same day or next 6h: only HH:MM
-                    time = f'[{start + self.tz_offset:%H:%M}]'
+                    day_cond = 'one_day'
                 else:
                     # more then 6h: yyyy.mm.dd HH:MM
-                    time = f'[{start + self.tz_offset:%Y.%m.%d %H:%M}]'
+                    day_cond = 'another_day'
+                # date-time style condition
                 if future:
-                    time = self.format_title(time, ['COLOR gray'])
-                elif end < now:
-                    time = self.format_title(time, ['COLOR red'])  # transmisja powinna być zakończona, do 5min
-                title = f'{time} {title}'
+                    time_cond = 'future'
+                elif end < now:  # transmisja powinna być zakończona, do 5min
+                    time_cond = 'finished'
+                else:
+                    time_cond = 'current'
+                # TIME - TITLE,  !? - format cond name, !$ - style cond name
+                title, label2 = self.fmt('{trans.time:!?day_cond!$time_cond} {trans.title}',
+                                         trans={'title': title, 'time': time},
+                                         time_cond=time_cond, day_cond=day_cond)
         elif start and start > now:
             if item.get('paymethod') and self.settings.email and self.settings.password:
                 prefix = self.format_title('[P]', ['COLOR gold'])
@@ -934,7 +1021,8 @@ class TvpPlugin(Plugin):
         position = 'top' if itype == 'directory_toplist' else None
         if position and not style:
             style = ['COLOR :spec', 'B']
-        kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu, style=style)
+        kwargs = dict(image=image, descr=descr, custom=custom, position=position, menu=menu, style=style,
+                      label2=label2)
         if itype in ('video', 'epg_item'):
             # if 'virtual_channel_id' in item:
             #     iid = item['virtual_channel_id']
@@ -1316,7 +1404,14 @@ class TvpPlugin(Plugin):
         streams_ = [d for d in streams if mimetype == d['mimeType']]
         if not streams_:
             streams_ = streams
-
+    def iter_stream_of_type(streams, *, end=False):
+        mime_types = {
+            'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
+            'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
+            'video/mp2t':            StreamType('hls', 'application/x-mpegURL'),
+            'application/dash+xml':  StreamType('mpd', 'application/dash+xml'),
+            'application/x-mpegurl': StreamType('hls', 'application/x-mpegURL'),
+        }
         stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
 
         if mimetype == 'application/dash+xml':
@@ -1358,6 +1453,19 @@ class TvpPlugin(Plugin):
     @staticmethod
     def get_stream_of_type(streams, *, begin=None, end=None, live=False, timeshift=False, mimetype=None):
         for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype):
+        streams = sorted(streams, key=lambda d: ((d['priority']), -int(d['totalBitrate'])), reverse=True)
+        for st in streams:
+            if 'material_niedostepny' not in st['url']:
+                for mime, stype in mime_types.items():
+                    if st['mimeType'] == mime:
+                        url = URL(st['url'])
+                        if end and 'end' not in url.query:
+                            url = url % {'end': end or ''}
+                        yield Stream(url=url, proto=stype.proto, mime=stype.mime)
+
+    @staticmethod
+    def get_stream_of_type(streams, *, end=False):
+        for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
             return stream
 
     def exception(self):

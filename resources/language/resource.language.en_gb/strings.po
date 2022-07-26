@@ -191,3 +191,47 @@ msgstr ""
 msgctxt "#30145"
 msgid "Login"
 msgstr ""
+
+msgctxt "#30146"
+msgid "TV list format"
+msgstr ""
+
+msgctxt "#30147"
+msgid "Custom format. Use {channel}, {prog}, {title}, {times}, {start}, {date}."
+msgstr ""
+
+msgctxt "#30148"
+msgid "Custom"
+msgstr ""
+
+msgctxt "#30149"
+msgid "[HH:MM-HH-MM] TV – PROGRAM"
+msgstr ""
+
+msgctxt "#30150"
+msgid "TV [HH:MM-HH-MM] – PROGRAM"
+msgstr ""
+
+msgctxt "#30151"
+msgid "TV – PROGRAM  ||  [HH:MM-HH-MM]"
+msgstr ""
+
+msgctxt "#30152"
+msgid "TV list custom format"
+msgstr ""
+
+msgctxt "#30153"
+msgid "Formatting"
+msgstr ""
+
+msgctxt "#30154"
+msgid "Time style"
+msgstr ""
+
+msgctxt "#30155"
+msgid "Channel style"
+msgstr ""
+
+msgctxt "#30156"
+msgid "Program style"
+msgstr ""
