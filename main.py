@@ -583,6 +583,8 @@ class TvpPlugin(Plugin):
                 if ch.epg and ch.epg.current:
                     channel, prog = ch, ch.epg.current
                     # title = f'[{prog.times}] {channel.name} – {prog.title}'
+                    if program:
+                        title_format = channel.name
                     title, label2 = self.fmt(title_format, prog=prog, channel=channel, tv=channel.name,
                                              title=prog.title, times=prog.times, start=prog.start, end=prog.end,
                                              date=prog.date)
@@ -600,7 +602,7 @@ class TvpPlugin(Plugin):
                         'plot': descr,
                     }
                     kwargs['menu'] = [
-                        (L(30137, 'Porgram'),
+                        (L(30137, 'Program'),
                          self.cmd.Container.Update(call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'))),
                         (L(30115, 'Archive'), self.cmd.Container.Update(call(self.replay_channel, ch.code))),
                     ]
@@ -1058,7 +1060,7 @@ class TvpPlugin(Plugin):
                 # if r:
                 #     S, L = r.group('s', 'l')
                 #     url = f'https://kmc.europarltv.europa.eu/p/{S}/sp/{S}00/embedIframeJs/uiconf_id/{L}/partner_id/{S}'
-                xbmcgui.Dialog().notification('TVP', 'Embedded player jest nieobsługiwany',
+                xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Embedded player jest nieobsługiwany',
                                               xbmcgui.NOTIFICATION_INFO)
                 return self.play_failed()
             resp = self.site.head(url, allow_redirects=False)
@@ -1113,7 +1115,7 @@ class TvpPlugin(Plugin):
                     end = now + timedelta(days=1)
             # if not start < now < end:  # sport only current
             if not data.get('paymethod') and start > now:  # future
-                xbmcgui.Dialog().notification('TVP', 'Transmisja niedostępna teraz', xbmcgui.NOTIFICATION_INFO)
+                xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Transmisja niedostępna teraz', xbmcgui.NOTIFICATION_INFO)
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
                 log(f'Video {id} in future: {start} > {now}', title='TVP')
                 return
@@ -1206,47 +1208,66 @@ class TvpPlugin(Plugin):
                                     streams_ = [d for d in streams if mimetype == d['mimeType']]
                                     stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
 
-                                    play_item = xbmcgui.ListItem(path=stream_url)
-                                    play_item.setProperty('IsPlayable', 'true')
-                                    play_item.setSubtitles(subt)
-                                    xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
-
+                                    if 'material_niedostepny' not in stream['url']:
+                                        play_item = xbmcgui.ListItem(path=stream['url'])
+                                        play_item.setProperty('IsPlayable', 'true')
+                                        play_item.setSubtitles(subt)
+                                        xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
+                                    else:
+                                        xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny')
+                                        self.play_failed()
         else:  # free
             log(f'free video: {id}', title='TVP')
             stream = Stream(stream_url, '', '')
-            if 'formats' in resp:
-                stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'])
-                if stream_url is not None:
-                    if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
-                            and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
-                        # remove `end` if error
-                        log(f'Remove `end` from {url!r}')
-                        url = stream.url
-                        url = url.with_query([(k, v) for k, v in url.query.items() if k != 'end'])
-                        stream = stream._replace(url=url)
-                    # XXX TEST
-                    # subt = self.subt_gen_free(id)
+            if 'material_niedostepny' not in stream.url:
+                if 'formats' in resp:
+                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'])
+                    if stream_url:
+                        if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
+                                and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
+                            log(f'Remove `end` from {url!r}')
+                            url = stream.url
+                            url = url.with_query([(k, v) for k, v in url.query.items() if k != 'end'])
+                            stream = stream._replace(url=url)
+
+                        play_item = xbmcgui.ListItem(path=str(stream.url))
+                        play_item.setProperty('IsPlayable', 'true')
+                        play_item.setProperty('inputstream.adaptive.manifest_type', stream.mime)
+                        play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
+                        if KODI_VERSION >= 20:
+                            play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+                        if not 'live=true' in stream.url:
+                            play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
+                        log(f'PLAY!: handle={self.handle!r}, url={stream!r}', title='TVP')
+                        return self._play(stream)
+
+                        xbmcgui.Dialog().notification('[B]Błąd[/B]', 'Brak strumienia do odtworzenia.',
+                                                      xbmcgui.NOTIFICATION_INFO, 3000, False)
+
+                        xbmcplugin.setResolvedUrl(self.handle, False, listitem=xbmcgui.ListItem())
+                        return
+
+                subt = self.subt_gen_free(id)
+                if stream:
                     play_item = xbmcgui.ListItem(path=str(stream.url))
                     play_item.setProperty('IsPlayable', 'true')
-                    # play_item.setSubtitles(subt)
-                    log(f'PLAY!: handle={self.handle!r}, url={stream!r}', title='TVP')
-                    return self._play(stream)
-                # for stream_url in self.iter_stream_of_type(resp['formats'], end=False):
-                #     resp = self.site.head(stream_url.url).status_code
-                #     log(f'SSSSSSSSSS {resp.status_code!r} for {stream_url!r}')
-                #     if resp.ok:
-                #         break
-                # else:
-                    xbmcgui.Dialog().notification('[B]Błąd[/B]', 'Brak strumienia do odtworzenia.',
-                                                  xbmcgui.NOTIFICATION_INFO, 3000, False)
-                    xbmcplugin.setResolvedUrl(self.handle, False, listitem=xbmcgui.ListItem())
-                    return
-            subt = self.subt_gen_free(id)
-            play_item = xbmcgui.ListItem(path=str(stream.url))
-            play_item.setProperty('IsPlayable', 'true')
-            play_item.setSubtitles(subt)
-            log(f'PLAY: handle={self.handle!r}, url={stream!r}', title='TVP')
-            xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
+                    play_item.setProperty('inputstream.adaptive.manifest_type', stream.mime)
+                    play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
+                    if KODI_VERSION >= 20:
+                        play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+                    if not 'live=true' in stream.url:
+                        play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
+                    play_item.setSubtitles(subt)
+
+                    log(f'PLAY: handle={self.handle!r}, url={stream!r}', title='TVP')
+                    xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
+                else:
+                    xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny') 
+                    self.play_failed()
+
+            else:
+               xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny') 
+               self.play_failed()
 
     def subt_gen_ABO(self, d):
         """Tablica z linkami do plików z napisami (format .ssa)."""
@@ -1404,14 +1425,7 @@ class TvpPlugin(Plugin):
         streams_ = [d for d in streams if mimetype == d['mimeType']]
         if not streams_:
             streams_ = streams
-    def iter_stream_of_type(streams, *, end=False):
-        mime_types = {
-            'application/vnd.ms-ss': StreamType('ism', 'application/vnd.ms-ss'),
-            'video/mp4':             StreamType('hls', 'application/x-mpegURL'),
-            'video/mp2t':            StreamType('hls', 'application/x-mpegURL'),
-            'application/dash+xml':  StreamType('mpd', 'application/dash+xml'),
-            'application/x-mpegurl': StreamType('hls', 'application/x-mpegURL'),
-        }
+
         stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
 
         if mimetype == 'application/dash+xml':
@@ -1421,7 +1435,7 @@ class TvpPlugin(Plugin):
         else:
             protocol = 'hls'
 
-        if 'material_niedostepny' not in stream:
+        if 'material_niedostepny' not in stream['url']:
             url = stream['url']
             params = {}
             if begin:
@@ -1450,22 +1464,14 @@ class TvpPlugin(Plugin):
 
             yield Stream(url=url_, proto=protocol, mime=stream['mimeType'])
 
-    @staticmethod
-    def get_stream_of_type(streams, *, begin=None, end=None, live=False, timeshift=False, mimetype=None):
-        for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype):
-        streams = sorted(streams, key=lambda d: ((d['priority']), -int(d['totalBitrate'])), reverse=True)
-        for st in streams:
-            if 'material_niedostepny' not in st['url']:
-                for mime, stype in mime_types.items():
-                    if st['mimeType'] == mime:
-                        url = URL(st['url'])
-                        if end and 'end' not in url.query:
-                            url = url % {'end': end or ''}
-                        yield Stream(url=url, proto=stype.proto, mime=stype.mime)
+        else:
+            xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny')
+            return
 
     @staticmethod
-    def get_stream_of_type(streams, *, end=False):
-        for stream in TvpPlugin.iter_stream_of_type(streams, end=end):
+    def get_stream_of_type(streams, *, begin=None, end=None, live=False, timeshift=False, mimetype=None):
+        for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
+                                                    mimetype=mimetype):
             return stream
 
     def exception(self):
@@ -1478,11 +1484,11 @@ class TvpPlugin(Plugin):
         file_name = self.settings.m3u_filename
 
         if not file_name or not path_m3u:
-            xbmcgui.Dialog().notification('TVP', L(30132, 'Set filename and destination directory'),
+            xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30132, 'Set filename and destination directory'),
                                           xbmcgui.NOTIFICATION_ERROR)
             return
 
-        xbmcgui.Dialog().notification('TVP', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
+        xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
         data = '#EXTM3U\n'
 
         for ch in self.channel_iter_stations():
@@ -1494,7 +1500,7 @@ class TvpPlugin(Plugin):
             f.write(data)
         finally:
             f.close()
-        xbmcgui.Dialog().notification('TVP', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
+        xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
 
 
 # DEBUG ONLY
