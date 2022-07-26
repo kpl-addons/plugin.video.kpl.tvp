@@ -1202,10 +1202,10 @@ class TvpPlugin(Plugin):
 
                                             return
                                 else:  # non-DRM
-                                    streams = d['formats']
-                                    streams_ = [d for d in streams if mimetype == d['mimeType']]
-                                    stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
-
+                                    for f in d['formats']:
+                                        if f['mimeType'] == 'application/x-mpegurl':
+                                            stream_url = f['url']
+                                            break
                                     play_item = xbmcgui.ListItem(path=stream_url)
                                     play_item.setProperty('IsPlayable', 'true')
                                     play_item.setSubtitles(subt)
