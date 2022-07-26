@@ -235,3 +235,19 @@ msgstr "Styl kanału"
 msgctxt "#30156"
 msgid "Program style"
 msgstr "Styl programu"
+
+msgctxt "#30157"
+msgid "Content not available"
+msgstr "Materiał niedostępny"
+
+msgctxt "#30158"
+msgid "[ABO zone] Access to content after entering the access data in the settings tab."
+msgstr "[Strefa ABO] Dostęp do materiału po wpisaniu danych dostępowych w zakładce ustawienia."
+
+msgctxt "#30159"
+msgid "[ABO zone] No authorization"
+msgstr "[Strefa ABO] Brak uprawnień"
+
+msgctxt "#30160"
+msgid "[B]Error[/B]"
+msgstr "[B]Błąd[/B]"

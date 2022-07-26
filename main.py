@@ -1158,10 +1158,7 @@ class TvpPlugin(Plugin):
             log(f'TVP oauth resp: {resp!r}', title='ABO')
             if 'error' in resp:
                 if resp['error'] == 'invalid_credentials':
-                    xbmcgui.Dialog().notification('[B]Błąd[/B]',
-                                                  ('[Strefa ABO] Dostęp do materiału po wpisaniu danych dostępowych'
-                                                   ' w zakładce ustawienia.'),
-                                                  xbmcgui.NOTIFICATION_INFO, 8000, False)
+                    xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30158, '[ABO zone] Information'),xbmcgui.NOTIFICATION_INFO, 8000, False)
             else:
                 token = resp['access_token']
                 hea = {
@@ -1176,7 +1173,7 @@ class TvpPlugin(Plugin):
                 resp = self.site.jpost(f'https://apivod.tvp.pl/tv/v2/video/{id}/default/default?device=android',
                                        headers=hea, verify=False)
                 if resp['success'] == 0:
-                    xbmcgui.Dialog().notification('[B]Błąd[/B]', '[Strefa ABO] Brak uprawnień', xbmcgui.NOTIFICATION_INFO, 8000, False)
+                    xbmcgui.Dialog().notification(L(30160, '[B]Error[/B]'), L(30159, '[ABO zone] No authorization'), xbmcgui.NOTIFICATION_INFO, 8000, False)
                 else:
                     for d in resp['data']:
                         if 'id' in d:
@@ -1214,7 +1211,7 @@ class TvpPlugin(Plugin):
                                         play_item.setSubtitles(subt)
                                         xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
                                     else:
-                                        xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny')
+                                        xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
                                         self.play_failed()
         else:  # free
             log(f'free video: {id}', title='TVP')
@@ -1262,11 +1259,11 @@ class TvpPlugin(Plugin):
                     log(f'PLAY: handle={self.handle!r}, url={stream!r}', title='TVP')
                     xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
                 else:
-                    xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny') 
+                    xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
                     self.play_failed()
 
             else:
-               xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny') 
+               xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
                self.play_failed()
 
     def subt_gen_ABO(self, d):
@@ -1465,7 +1462,7 @@ class TvpPlugin(Plugin):
             yield Stream(url=url_, proto=protocol, mime=stream['mimeType'])
 
         else:
-            xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Materiał niedostępny')
+            xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
             return
 
     @staticmethod

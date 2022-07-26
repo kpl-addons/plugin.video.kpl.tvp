@@ -235,3 +235,19 @@ msgstr ""
 msgctxt "#30156"
 msgid "Program style"
 msgstr ""
+
+msgctxt "#30157"
+msgid "Content not available"
+msgstr ""
+
+msgctxt "#30158"
+msgid "[ABO zone] Access to content after entering the access data in the settings tab."
+msgstr ""
+
+msgctxt "#30159"
+msgid "[ABO zone] No authorization"
+msgstr ""
+
+msgctxt "#30160"
+msgid "[B]Error[/B]"
+msgstr ""
