@@ -1218,7 +1218,12 @@ class TvpPlugin(Plugin):
             stream = Stream(stream_url, '', '')
             if 'material_niedostepny' not in stream.url:
                 if 'formats' in resp:
-                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'])
+                    if resp['mimeType'] == 'application/vnd.ms-ss':
+                        mimetype = 'application/x-mpegurl'
+                    else:
+                        mimetype = resp['mimeType']
+
+                    stream = self.get_stream_of_type(resp['formats'], mimetype=mimetype)
                     if stream_url:
                         if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                                 and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
