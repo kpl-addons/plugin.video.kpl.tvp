@@ -1202,8 +1202,7 @@ class TvpPlugin(Plugin):
                                             return
                                 else:  # non-DRM
                                     streams = d['formats']
-                                    streams_ = [d for d in streams if mimetype == d['mimeType']]
-                                    stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
+                                    stream = sorted(streams, key=lambda d: (int(d['totalBitrate'])), reverse=True)[0]
 
                                     if 'material_niedostepny' not in stream['url']:
                                         play_item = xbmcgui.ListItem(path=stream['url'])
@@ -1218,12 +1217,7 @@ class TvpPlugin(Plugin):
             stream = Stream(stream_url, '', '')
             if 'material_niedostepny' not in stream.url:
                 if 'formats' in resp:
-                    if resp['mimeType'] == 'application/vnd.ms-ss':
-                        mimetype = 'application/x-mpegurl'
-                    else:
-                        mimetype = resp['mimeType']
-
-                    stream = self.get_stream_of_type(resp['formats'], mimetype=mimetype)
+                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'])
                     if stream_url:
                         if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                                 and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
@@ -1424,7 +1418,7 @@ class TvpPlugin(Plugin):
 
     @staticmethod
     def iter_stream_of_type(streams, *, begin, end, live, timeshift, mimetype):
-        streams_ = [d for d in streams if mimetype == d['mimeType']]
+        streams_ = [d for d in streams if mimetype.replace('application/vnd.ms-ss', 'application/x-mpegurl') == d['mimeType']]
         if not streams_:
             streams_ = streams
 
