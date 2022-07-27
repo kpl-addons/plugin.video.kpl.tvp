@@ -1060,7 +1060,7 @@ class TvpPlugin(Plugin):
                 # if r:
                 #     S, L = r.group('s', 'l')
                 #     url = f'https://kmc.europarltv.europa.eu/p/{S}/sp/{S}00/embedIframeJs/uiconf_id/{L}/partner_id/{S}'
-                xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Embedded player jest nieobsługiwany',
+                xbmcgui.Dialog().notification('[B]TVP[/B]', 'Embedded player jest nieobsługiwany',
                                               xbmcgui.NOTIFICATION_INFO)
                 return self.play_failed()
             resp = self.site.head(url, allow_redirects=False)
@@ -1115,7 +1115,7 @@ class TvpPlugin(Plugin):
                     end = now + timedelta(days=1)
             # if not start < now < end:  # sport only current
             if not data.get('paymethod') and start > now:  # future
-                xbmcgui.Dialog().notification('[B]TVP GO[/B]', 'Transmisja niedostępna teraz', xbmcgui.NOTIFICATION_INFO)
+                xbmcgui.Dialog().notification('[B]TVP[/B]', 'Transmisja niedostępna teraz', xbmcgui.NOTIFICATION_INFO)
                 xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
                 log(f'Video {id} in future: {start} > {now}', title='TVP')
                 return
@@ -1158,7 +1158,7 @@ class TvpPlugin(Plugin):
             log(f'TVP oauth resp: {resp!r}', title='ABO')
             if 'error' in resp:
                 if resp['error'] == 'invalid_credentials':
-                    xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30158, '[ABO zone] Information'),xbmcgui.NOTIFICATION_INFO, 8000, False)
+                    xbmcgui.Dialog().notification('[B]TVP[/B]', L(30158, '[ABO zone] Information'),xbmcgui.NOTIFICATION_INFO, 8000, False)
             else:
                 token = resp['access_token']
                 hea = {
@@ -1211,7 +1211,7 @@ class TvpPlugin(Plugin):
                                         play_item.setSubtitles(subt)
                                         xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
                                     else:
-                                        xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
+                                        xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
                                         self.play_failed()
         else:  # free
             log(f'free video: {id}', title='TVP')
@@ -1259,11 +1259,11 @@ class TvpPlugin(Plugin):
                     log(f'PLAY: handle={self.handle!r}, url={stream!r}', title='TVP')
                     xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
                 else:
-                    xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
+                    xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
                     self.play_failed()
 
             else:
-               xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
+               xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
                self.play_failed()
 
     def subt_gen_ABO(self, d):
@@ -1462,7 +1462,7 @@ class TvpPlugin(Plugin):
             yield Stream(url=url_, proto=protocol, mime=stream['mimeType'])
 
         else:
-            xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
+            xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
             return
 
     @staticmethod
@@ -1481,11 +1481,11 @@ class TvpPlugin(Plugin):
         file_name = self.settings.m3u_filename
 
         if not file_name or not path_m3u:
-            xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30132, 'Set filename and destination directory'),
+            xbmcgui.Dialog().notification('[B]TVP[/B]', L(30132, 'Set filename and destination directory'),
                                           xbmcgui.NOTIFICATION_ERROR)
             return
 
-        xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
+        xbmcgui.Dialog().notification('[B]TVP[/B]', L(30134, 'Generate playlist'), xbmcgui.NOTIFICATION_INFO)
         data = '#EXTM3U\n'
 
         for ch in self.channel_iter_stations():
@@ -1497,7 +1497,7 @@ class TvpPlugin(Plugin):
             f.write(data)
         finally:
             f.close()
-        xbmcgui.Dialog().notification('[B]TVP GO[/B]', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
+        xbmcgui.Dialog().notification('[B]TVP[/B]', L(30135, 'Playlist M3U generated'), xbmcgui.NOTIFICATION_INFO)
 
 
 # DEBUG ONLY
