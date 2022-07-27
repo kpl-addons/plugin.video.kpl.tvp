@@ -19,6 +19,7 @@ from html import unescape
 from datetime import datetime, timedelta
 import re
 from enum import IntEnum
+import xbmc  # for getCondVisibility and getInfoLabel
 import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
 import xbmcvfs  # for file in m3u generator
@@ -40,6 +41,7 @@ Future = object()
 CurrentAndFuture = object()
 
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
+
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -111,6 +113,10 @@ def image_link(image):
     fname: str = image['file_name']
     name, _, ext = fname.rpartition('.')
     return URL(f'http://s.v3.tvp.pl/images/{name[:1]}/{name[1:2]}/{name[2:3]}/uid_{name}_width_{width}_gs_0.{ext}')
+
+
+def has_addon(addon_id):
+    return xbmc.getCondVisibility('System.HasAddon(%s)' % addon_id) == 1
 
 
 StreamType = namedtuple('StreamType', 'proto mime')
@@ -1106,6 +1112,7 @@ class TvpPlugin(Plugin):
         ###!!!     id = data['live_video_id']
         start = self._item_start_time(data)
         end = self._item_end_time(data)
+        subt = ''
         if start:
             now = datetime.utcnow()
             if not end:
@@ -1178,7 +1185,8 @@ class TvpPlugin(Plugin):
                     for d in resp['data']:
                         if 'id' in d:
                             if d['id'] == id:
-                                subt = self.subt_gen_ABO(d)
+                                if has_addon("script.module.ttml2ssa"):
+                                    subt = self.subt_gen_ABO(d)
                                 if d['is_drm'] is True:  # DRM
                                     url_stream = re.findall('fileDash\': \'([^\']+?)\'', str(resp))[0]
                                     licUrl = re.findall('proxyWidevine\': \'([^\']+?)\'', str(resp))[0]
@@ -1191,7 +1199,8 @@ class TvpPlugin(Plugin):
                                         is_helper = inputstreamhelper.Helper(PROTOCOL, drm=DRM)
                                         if is_helper.check_inputstream():
                                             play_item = xbmcgui.ListItem(path=url_stream)
-                                            play_item.setSubtitles(subt)
+                                            if has_addon("script.module.ttml2ssa"):
+                                                play_item.setSubtitles(subt)
                                             play_item.setProperty("inputstream", is_helper.inputstream_addon)
                                             play_item.setProperty("inputstream.adaptive.manifest_type", PROTOCOL)
                                             play_item.setContentLookup(False)
@@ -1207,7 +1216,8 @@ class TvpPlugin(Plugin):
                                     if 'material_niedostepny' not in stream['url']:
                                         play_item = xbmcgui.ListItem(path=stream['url'])
                                         play_item.setProperty('IsPlayable', 'true')
-                                        play_item.setSubtitles(subt)
+                                        if has_addon("script.module.ttml2ssa"):
+                                            play_item.setSubtitles(subt)
                                         xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
                                     else:
                                         xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
