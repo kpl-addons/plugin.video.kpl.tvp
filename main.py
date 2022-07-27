@@ -1418,7 +1418,15 @@ class TvpPlugin(Plugin):
 
     @staticmethod
     def iter_stream_of_type(streams, *, begin, end, live, timeshift, mimetype):
-        streams_ = [d for d in streams if mimetype.replace('application/vnd.ms-ss', 'application/x-mpegurl') == d['mimeType']]
+        ism = 'application/vnd.ms-ss'
+        if ism == mimetype:
+            for d in streams:
+                if d['mimeType'] == ism:
+                    streams.remove(d)
+            streams_ = streams
+        else:
+            streams_ = [d for d in streams if mimetype == d['mimeType']]
+
         if not streams_:
             streams_ = streams
 
@@ -1426,8 +1434,6 @@ class TvpPlugin(Plugin):
 
         if mimetype == 'application/dash+xml':
             protocol = 'mpd'
-        elif mimetype == 'application/vnd.ms-ss':
-            protocol = 'ism'
         else:
             protocol = 'hls'
 
