@@ -1458,15 +1458,15 @@ class TvpPlugin(Plugin):
         streams = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=True)
 
         for stream in streams:
-            bitrate = int(stream['totalBitrate'])
+            bitrate = int(stream['totalBitrate'] / 1000)
             mimetype = stream['mimeType']
 
-            if bitrate >= 4000000:
+            if bitrate >= 4000:
                 res = f'1080p, Stream type: {mimetype}'
-            elif bitrate >= 1000000:
+            elif bitrate >= 1500:
                 res = f'720p, Stream type: {mimetype}'
-            elif bitrate >= 500000:
-                res = f'560p, Stream type: {mimetype}'
+            elif bitrate >= 1200:
+                res = f'540p, Stream type: {mimetype}'
             else:
                 res = f'480p, Stream type: {mimetype}'
 
@@ -1490,19 +1490,19 @@ class TvpPlugin(Plugin):
 
             # 1080p
             elif settings.bitrate_selector == 2:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] >= 4000000][0])), reverse=True)[-1]
+                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 4000][0])), reverse=True)[-1]
 
             # 720p
             elif settings.bitrate_selector == 3:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] >= 1000000][0])), reverse=True)[-1]
+                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 1500][0])), reverse=True)[-1]
 
             # 560p
             elif settings.bitrate_selector == 4:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] >= 500000][0])), reverse=True)[-1]
+                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 1200][0])), reverse=True)[-1]
 
             # 480p
             elif settings.bitrate_selector == 5:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] >= 0][0])), reverse=True)[-1]
+                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 0][0])), reverse=True)[-1]
 
             else:
                 stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
