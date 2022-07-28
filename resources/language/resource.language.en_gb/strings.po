@@ -251,3 +251,31 @@ msgstr ""
 msgctxt "#30160"
 msgid "[B]Error[/B]"
 msgstr ""
+
+msgctxt "#30161"
+msgid "Stream quality selection"
+msgstr ""
+
+msgctxt "#30162"
+msgid "Manually"
+msgstr ""
+
+msgctxt "#30163"
+msgid "Select highest quality"
+msgstr ""
+
+msgctxt "#30164"
+msgid "1080p"
+msgstr ""
+
+msgctxt "#30165"
+msgid "720p"
+msgstr ""
+
+msgctxt "#30166"
+msgid "560p"
+msgstr ""
+
+msgctxt "#30167"
+msgid "480p"
+msgstr ""
