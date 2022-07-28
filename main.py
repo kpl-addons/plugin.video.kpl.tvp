@@ -449,7 +449,7 @@ class TvpPlugin(Plugin):
 
     def listing(self, id: PathArg[int], page=None, vid_type=None):
         """Use api.v3.tvp.pl JSON listing."""
-        per_page = 100  # liczba vide na stonę
+        per_page = 100  # liczba video na stonę
         # PAGE = None  # wszystko na raz na stronie
 
         # TODO:  determine `view`
@@ -472,7 +472,7 @@ class TvpPlugin(Plugin):
             #     if parents:
             #         kdir.menu('^^^', call(self.listing, id=parents[0]))  # XXX DEBUG
             if len(items) == 1 and items[0].get('object_type') == 'directory_video' and items[0]['title'] == 'wideo':
-                # Oszukany katalog sezonu, pokaż id razu odcinki.
+                # Oszukany katalog sezonu, pokaż od razu odcinki.
                 data = self.site.listing(items[0]['asset_id'])
                 items = data.get('items') or ()
 
@@ -481,10 +481,15 @@ class TvpPlugin(Plugin):
                 if data.get('total_count') and data['total_count'] > per_page:
                     count = data['total_count']
                     for n in range((count + per_page - 1) % per_page):
-                        if etype == 'directory_video':
-                            kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='video'))
+                        if n == round(count / per_page):
+                            break
                         else:
-                            kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
+                            if etype == 'directory_video':
+                                kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='video'))
+                            elif etype == 'website':
+                                kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='website'))
+                            else:
+                                kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
                     return
 
             items = [item for item in items if item.get('object_type') in self.TYPES_ALLOWED]
@@ -523,8 +528,18 @@ class TvpPlugin(Plugin):
                                               if it.get('object_type') == 'video' and it.get('playable')]
 
             # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
-            for item in items:
-                self._item(kdir, item)
+            if vid_type == 'website':
+                with self.site.concurrent() as con:
+                    con.a.data.listing(id)
+                    con.a.details.details(id)
+                data = con.a.data
+                a_id = data['items'][0]['asset_id']
+                items = self.site.listing(a_id, count=per_page, page=page).get('items')
+                for item in items:
+                    self._item(kdir, item)
+            else:
+                for item in items:
+                    self._item(kdir, item)
 
     # XXX  Jeszcze nieużywane
     EXTRA_TV = [
@@ -667,7 +682,7 @@ class TvpPlugin(Plugin):
         live, to_get = [], [68970]
         # filter_data = json.dumps({"playable": True})
         while to_get:
-            log(f'tv_tree({to_get})...')
+            # log(f'tv_tree({to_get})...')
             with self.site.concurrent() as con:
                 for pid in to_get:
                     # con.jget(None, params={'direct': True, 'count': '', 'parent_id': pid, 'filter': filter_data})
@@ -1410,7 +1425,7 @@ class TvpPlugin(Plugin):
         sep = True
         with self.directory() as kdir:
             page = self.site.txtget('https://vod.tvp.pl/szukaj', params={'query': query})
-            log(f'VS: page.len={len(page)!r}')
+            # log(f'VS: page.len={len(page)!r}')
             for jsdata in dom_select(page, 'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
                 item = json.loads(unescape(jsdata))
                 # log(f'VS: {item!r}')
