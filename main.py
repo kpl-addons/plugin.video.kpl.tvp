@@ -368,6 +368,30 @@ class TvpPlugin(Plugin):
         'virtual_channel',
     }
 
+    NOT_ALLOWED = {
+        'strona-glowna',
+        'strona-druzyn-ligi',
+        'strona-glowna-dyscypliny',
+        'aktualnosci',
+        'galeriee',
+        'galerie',
+        'galerie-zdjec',
+        'galeria',
+        'sg',
+        'klasyfikacja-medalowa',
+        'wyniki',
+        'sidebars',
+        'sidebary',
+        'menu',
+        'terminarz',
+        'kadra-olimpijska',
+        'ankieta',
+        'testy',
+        'wyniki-top',
+        'statystyki-turnieju',
+        'promocja-sport',
+        'video-import'
+    }
     vod_search = subobject()
 
     epg_url = 'http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25'
@@ -491,8 +515,8 @@ class TvpPlugin(Plugin):
                             else:
                                 kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
                     return
-
-            items = [item for item in items if item.get('object_type') in self.TYPES_ALLOWED]
+            items = [item for item in items if
+                     item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
 
             # Analiza szcegółów, w tym dokładnych opisów i danych video
             if self.settings.api_details:
