@@ -603,11 +603,12 @@ class TvpPlugin(Plugin):
             for prog in epgs.values():
                 cur = prog.current
                 if cur:
-                    prog._current = ChannelProgram({**con[cur.id]['data'],
-                                                    'date_start': cur['date_start'], 'date_end': cur['date_end']})
+                    if cur.id:
+                        prog._current = ChannelProgram({**con[cur.id]['data'], 'date_start': cur['date_start'], 'date_end': cur['date_end']})
         for item in stations:
             image = self._item_image(item, preferred='image_square')
             name, code = item['name'], item.get('code', '')
+            name = re.sub(r"([0-9]+(\.[0-9]+)?)", r" \1", name).strip().replace('  ', ' ')
             yield ChannelInfo(code=code, name=name, image=image, id=item.get('id'), epg=epgs.get(code))
 
     @entry(title=L(30137, 'Program'))
@@ -629,6 +630,7 @@ class TvpPlugin(Plugin):
                     # title = f'[{prog.times}] {channel.name} – {prog.title}'
                     if program:
                         title_format = channel.name
+
                     title, label2 = self.fmt(title_format, prog=prog, channel=channel, tv=channel.name,
                                              title=prog.title, times=prog.times, start=prog.start, end=prog.end,
                                              date=prog.date)
