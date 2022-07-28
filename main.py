@@ -43,6 +43,7 @@ CurrentAndFuture = object()
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
 
+
 class TransmissionLayout(IntEnum):
     DayFolder = 0
     DayLabel = 1
@@ -909,6 +910,12 @@ class TvpPlugin(Plugin):
                 play_item.setMimeType(stream.mime)
             play_item.setContentLookup(False)
             play_item.setProperty("IsPlayable", "true")
+            play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
+            play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
+            if KODI_VERSION >= 20:
+                play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+            if 'live=true' not in stream.url:
+                play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
             xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
 
     def _item_start_time(self, item):
@@ -1299,6 +1306,26 @@ class TvpPlugin(Plugin):
 
             else:
                 xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
+                    play_item = xbmcgui.ListItem(path=str(stream.url))
+                    play_item.setProperty('IsPlayable', 'true')
+                    play_item.setProperty('inputstream.adaptive.manifest_type', stream.mime)
+                    play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
+                    if KODI_VERSION >= 20:
+                        play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+                    if not 'live=true' in stream.url:
+                        play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
+                    play_item.setSubtitles(subt)
+
+                    log(f'PLAY: handle={self.handle!r}, url={stream!r}', title='TVP')
+                    xbmcplugin.setResolvedUrl(self.handle, True, listitem=play_item)
+                else:
+                    xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'),
+                                                  xbmcgui.NOTIFICATION_INFO, 3000, False)
+                    self.play_failed()
+
+            else:
+                xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO,
+                                              3000, False)
                 self.play_failed()
 
     def subt_gen_abo(self, d):
@@ -1561,6 +1588,9 @@ class TvpPlugin(Plugin):
     def get_stream_of_type(streams, *, begin=None, end=None, live='', timeshift='', mimetype=None):
         stream = TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype)
         return stream
+        for stream in TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
+                                                    mimetype=mimetype):
+            return stream
 
     def exception(self):
         raise RuntimeError()
