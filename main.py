@@ -900,6 +900,7 @@ class TvpPlugin(Plugin):
                 play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
                 play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
                 play_item.setProperty('inputstream.adaptive.stream_headers', 'Referer: https://vod.tvp.pl/&User-Agent='+quote(UA))
+                play_item.setProperty('StartOffset', '60.0')
                 if KODI_VERSION >= 20:
                     play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
                 if 'live=true' not in stream.url:
