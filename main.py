@@ -499,6 +499,10 @@ class TvpPlugin(Plugin):
             #     parents = items[0]['parents'][1:]
             #     if parents:
             #         kdir.menu('^^^', call(self.listing, id=parents[0]))  # XXX DEBUG
+
+            items = [item for item in items if
+                     item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
+
             if len(items) == 1 and items[0].get('object_type') == 'directory_video' and items[0]['title'] == 'wideo':
                 # Oszukany katalog sezonu, pokaż od razu odcinki.
                 data = self.site.listing(items[0]['asset_id'])
@@ -516,8 +520,6 @@ class TvpPlugin(Plugin):
                         else:
                             kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
                     return
-            items = [item for item in items if
-                     item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
 
             # Analiza szcegółów, w tym dokładnych opisów i danych video
             if self.settings.api_details:
