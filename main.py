@@ -1459,29 +1459,18 @@ class TvpPlugin(Plugin):
                     kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
     def bitrate_calculator(bitrate):
-        bit = int(bitrate / 1000)
-        resolutions = ['424x240', '640x360', '768x432', '848x480', '1024x576', '1280x720', '1920x1080']
+        bitrate_ = int(bitrate / 10000)
 
-        for res in resolutions:
-            if bit < 576:
-                i = 0
-            elif bit < 896:
-                i = 1
-            elif bit < 1088:
-                i = 2
-            elif bit < 1536:
-                i = 3
-            elif bit < 2176:
-                i = 4
-            elif bit < 3072:
-                i = 5
-            elif bit < 20000:
-                i = 6
-            else:
-                i = 0
-            break
+        possible_bitrates = [32, 40, 48, 56, 64, 112, 128, 160, 256, 512, 640, 10000]
+        possible_resolutions = ['128×96', '160×120', '256×144', '320×180', '400x225', '480×240', '640×360', '720x400', '800x480', '960x540', '1280x720', '1920x1080']
 
-        return resolutions[i]
+        resolutions = [possible_bitrates.index(b) for b in possible_bitrates if bitrate_ < b]
+        if resolutions:
+            i = resolutions[0]
+        else:
+            i = 0
+
+        return possible_resolutions[i]
 
     def bitrate_selector_menu(streams):
         selector = []
@@ -1524,7 +1513,6 @@ class TvpPlugin(Plugin):
 
                 headers = {
                     'User-Agent': 'okhttp/5.0.0-alpha.2',
-                    'Accept-Encoding': 'identity'
                 }
 
                 resp = requests.get(stream['url'], headers=headers)
