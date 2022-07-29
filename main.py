@@ -1514,22 +1514,21 @@ class TvpPlugin(Plugin):
             stream = TvpPlugin.bitrate_selector_menu(streams)
 
         else:
-            for i in range(2, 5):
-                if settings.bitrate_selector == 2: # 1080p
-                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 5000 and int(d['totalBitrate'] / 1000) < 10000]
-                    stream = bandwidths[0] if bandwidths else None
+            if settings.bitrate_selector == 2: # 1080p
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 5000 and int(d['totalBitrate'] / 1000) < 10000]
+                stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 3: # 720p
-                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 5000]
-                    stream = bandwidths[0] if bandwidths else None
+            elif settings.bitrate_selector == 3: # 720p
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 5000]
+                stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 4: # 576p
-                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 3500]
-                    stream = bandwidths[0] if bandwidths else None
+            elif settings.bitrate_selector == 4: # 576p
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 3500]
+                stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 5: # 480p
-                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
-                    stream = bandwidths[0] if bandwidths else None
+            elif settings.bitrate_selector == 5: # 480p
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
+                stream = bandwidths[0] if bandwidths else None
 
             # highest quality
             if not stream:
