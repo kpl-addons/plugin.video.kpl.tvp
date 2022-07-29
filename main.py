@@ -43,6 +43,7 @@ CurrentAndFuture = object()
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
 
+
 class TransmissionLayout(IntEnum):
     DayFolder = 0
     DayLabel = 1
@@ -273,8 +274,9 @@ class TvpSite(Site):
                 con.occurrence(prog.id)
         # EPG `occurrence` sometime lay about start and end date
         # (SKIP occurrence OVERRIDE)    epg = ChannelEpg(ChannelProgram(data['data']) for data in con)
-        epg = ChannelEpg(ChannelProgram({**occ['data'], 'date_start': prog['date_start'], 'date_end': prog['date_end']})
-                         for prog, occ in zip(epg, con))
+        epg = ChannelEpg(
+            ChannelProgram({**occ['data'], 'date_start': prog['date_start'], 'date_end': prog['date_end']})
+            for prog, occ in zip(epg, con))
         return epg
 
     def station_program(self, station_code, record_id):
@@ -605,7 +607,8 @@ class TvpPlugin(Plugin):
                 cur = prog.current
                 if cur:
                     if cur.get('data'):
-                        prog._current = ChannelProgram({**con[cur.id]['data'], 'date_start': cur['date_start'], 'date_end': cur['date_end']})
+                        prog._current = ChannelProgram(
+                            {**con[cur.id]['data'], 'date_start': cur['date_start'], 'date_end': cur['date_end']})
         for item in stations:
             image = self._item_image(item, preferred='image_square')
             name, code = item['name'], item.get('code', '')
@@ -801,6 +804,20 @@ class TvpPlugin(Plugin):
                         title = f'[I]{title}[/I]'
                         kdir.item(title, self.no_operation, image=img, info=info, label2=label2)
 
+    @entry(path='/iptv_catchup/<code>/<date>')
+    def _iptv_catchup_helper(self, code, date):
+        date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
+        timestamp = int((datetime.timestamp(date_obj) * 1000))
+        epg = self.site.station_epg(code, date)
+
+        for e in epg:
+            if timestamp == int(e['date_start']):
+                pid = e.get('record_id')
+                streams, mimetype = self.site.station_streams(station_code=code, record_id=pid)
+                if streams:
+                    stream = self.get_stream_of_type(streams, mimetype=mimetype)
+                    self._play(stream)
+
     def _epg_item(self, kdir, item, *, code=None, now=None):
         if now is None:
             now = datetime.now()
@@ -861,8 +878,8 @@ class TvpPlugin(Plugin):
             begin_tag = None
             end_tag = None
 
-        data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data', params={'station_code': code}).get(
-            'data')
+        data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
+                              params={'station_code': code}).get('data')
         if data:
             redir = self.site.jget(data['stream_url'])
             formats = redir.get('formats')
@@ -901,7 +918,8 @@ class TvpPlugin(Plugin):
                     play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
                     play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
                     play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
-                    play_item.setProperty('inputstream.adaptive.stream_headers', 'Referer: https://vod.tvp.pl/&User-Agent='+quote(UA))
+                    play_item.setProperty('inputstream.adaptive.stream_headers',
+                                          'Referer: https://vod.tvp.pl/&User-Agent=' + quote(UA))
                     if KODI_VERSION >= 20:
                         play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
                     if 'live=true' not in stream.url:
@@ -1304,7 +1322,8 @@ class TvpPlugin(Plugin):
                     return self._play(stream)
 
             else:
-                xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO, 3000, False)
+                xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'),
+                                              xbmcgui.NOTIFICATION_INFO, 3000, False)
                 self.play_failed()
 
     def subt_gen_abo(self, d):
@@ -1442,7 +1461,8 @@ class TvpPlugin(Plugin):
         with self.directory() as kdir:
             page = self.site.txtget('https://vod.tvp.pl/szukaj', params={'query': query})
             # log(f'VS: page.len={len(page)!r}')
-            for jsdata in dom_select(page, 'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
+            for jsdata in dom_select(page,
+                                     'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
                 item = json.loads(unescape(jsdata))
                 # log(f'VS: {item!r}')
                 sid = item['myListId']  # seris link
@@ -1462,7 +1482,8 @@ class TvpPlugin(Plugin):
         bitrate_ = int(bitrate / 10000)
 
         possible_bitrates = [32, 40, 48, 56, 64, 112, 128, 160, 256, 512, 640, 10000]
-        possible_resolutions = ['128×96', '160×120', '256×144', '320×180', '400x225', '480×240', '640×360', '720x400', '800x480', '960x540', '1280x720', '1920x1080']
+        possible_resolutions = ['128×96', '160×120', '256×144', '320×180', '400x225', '480×240', '640×360', '720x400',
+                                '800x480', '960x540', '1280x720', '1920x1080']
 
         resolutions = [possible_bitrates.index(b) for b in possible_bitrates if bitrate_ < b]
         if resolutions:
@@ -1517,15 +1538,15 @@ class TvpPlugin(Plugin):
 
                 resp = requests.get(stream['url'], headers=headers)
 
-                bandwidth_regex = re.compile(r'bandwidth="?(\d+)"?', re.DOTALL|re.IGNORECASE)
+                bandwidth_regex = re.compile(r'bandwidth="?(\d+)"?', re.DOTALL | re.IGNORECASE)
                 bandwidths = bandwidth_regex.findall(resp.text)
                 bandwidth_sorted = sorted(bandwidths, key=lambda d: (-int(d)), reverse=False)
                 bandwidth = bandwidth_sorted[0] if bandwidth_sorted else bandwidth
 
                 resolution_tuple = (0, 0)
 
-                resolution_regex_a = re.compile(r'width="?(\d+)"? height="?(\d+)"?', re.DOTALL|re.IGNORECASE)
-                resolution_regex_b = re.compile(r'resolution=(\d+)x(\d+)', re.DOTALL|re.IGNORECASE)
+                resolution_regex_a = re.compile(r'width="?(\d+)"? height="?(\d+)"?', re.DOTALL | re.IGNORECASE)
+                resolution_regex_b = re.compile(r'resolution=(\d+)x(\d+)', re.DOTALL | re.IGNORECASE)
                 resolutions = resolution_regex_a.findall(resp.text)
                 if not resolutions:
                     resolutions = resolution_regex_b.findall(resp.text)
@@ -1545,23 +1566,28 @@ class TvpPlugin(Plugin):
                 stream = None
 
             elif settings.bitrate_selector == 2:  # 1080p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
+                bandwidths = [d for d in streams if
+                              int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
                 stream = bandwidths[0] if bandwidths else None
 
             elif settings.bitrate_selector == 3:  # 720p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
+                bandwidths = [d for d in streams if
+                              int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
                 stream = bandwidths[0] if bandwidths else None
 
             elif settings.bitrate_selector == 4:  # 576p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
+                bandwidths = [d for d in streams if
+                              int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
                 stream = bandwidths[0] if bandwidths else None
 
             elif settings.bitrate_selector == 5:  # 480p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
+                bandwidths = [d for d in streams if
+                              int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
                 stream = bandwidths[0] if bandwidths else None
 
             if not stream:
-                streams_by_mimetype = [d for d in streams if mimetype == d['mimeType'] and settings.bitrate_selector == 0] # defualt
+                streams_by_mimetype = [d for d in streams if
+                                       mimetype == d['mimeType'] and settings.bitrate_selector == 0]  # defualt
                 if not streams_by_mimetype:
                     streams_by_mimetype = streams
                 stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
@@ -1619,7 +1645,8 @@ class TvpPlugin(Plugin):
             return
 
     def get_stream_of_type(self, streams, *, begin=None, end=None, live='', timeshift='', mimetype=None):
-        stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype)
+        stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
+                                          mimetype=mimetype)
         return stream
 
     def exception(self):
@@ -1641,7 +1668,7 @@ class TvpPlugin(Plugin):
 
         for ch in self.channel_iter_stations():
             url = self.mkurl(self.station, code=ch.code)
-            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" group-title="TVP",{ch.name}\n{url}\n'
+            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default"' 'catchup-source="plugin://plugin.video.kpl.tvp/iptv_catchup/' + ch.code + '/{Y}-{m}-{d}T{H}:{M}:{S}" catchup-days="7",' + f'{ch.name}\n{url}\n'
 
         try:
             f = xbmcvfs.File(path_m3u + file_name, 'w')
