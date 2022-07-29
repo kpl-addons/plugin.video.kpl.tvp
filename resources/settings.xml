@@ -92,6 +92,23 @@
 						<heading>30138</heading>
 					</control>
 				</setting>
+				<setting id="per_page_limit" label="30168" type="integer">
+					<level>1</level>
+					<default>200</default>
+					<constraints>
+						<options>
+							<option label="30169">50</option>
+							<option label="30170">100</option>
+							<option label="30171">150</option>
+							<option label="30172">200</option>
+							<option label="30173">250</option>
+							<option label="30174">500</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30168</heading>
+					</control>
+				</setting>
 			</group>
 			<group id="22" label="30153">
 				<setting id="tv_entry_format" type="integer" label="30146" help="">

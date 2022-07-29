@@ -477,7 +477,7 @@ class TvpPlugin(Plugin):
 
     def listing(self, id: PathArg[int], page=None, vid_type=None):
         """Use api.v3.tvp.pl JSON listing."""
-        per_page = 100  # liczba video na stonę
+        per_page = self.settings.per_page_limit  # liczba video na stonę
         # PAGE = None  # wszystko na raz na stronie
 
         # TODO:  determine `view`

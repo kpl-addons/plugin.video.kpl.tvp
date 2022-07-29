@@ -279,3 +279,31 @@ msgstr ""
 msgctxt "#30167"
 msgid "480p"
 msgstr ""
+
+msgctxt "#30168"
+msgid "Per page limit"
+msgstr ""
+
+msgctxt "#30169"
+msgid "50 items"
+msgstr ""
+
+msgctxt "#30170"
+msgid "100 items"
+msgstr ""
+
+msgctxt "#30171"
+msgid "150 items"
+msgstr ""
+
+msgctxt "#30172"
+msgid "200 items"
+msgstr ""
+
+msgctxt "#30173"
+msgid "250 items"
+msgstr ""
+
+msgctxt "#30174"
+msgid "500 items"
+msgstr ""
