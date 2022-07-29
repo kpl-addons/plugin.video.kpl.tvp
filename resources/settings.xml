@@ -48,12 +48,13 @@
 					<default>1</default>
 					<constraints>
 						<options>
-							<option label="30162">0</option>
+							<option label="30168">0</option>
 							<option label="30163">1</option>
 							<option label="30164">2</option>
 							<option label="30165">3</option>
 							<option label="30166">4</option>
 							<option label="30167">5</option>
+							<option label="30162">6</option>
 						</options>
 					</constraints>
 					<control type="list" format="string">

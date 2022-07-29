@@ -392,7 +392,9 @@ class TvpPlugin(Plugin):
         'wyniki-top',
         'statystyki-turnieju',
         'promocja-sport',
-        'video-import'
+        'video-import',
+        'obsada',
+        'tworcy'
     }
     vod_search = subobject()
 
@@ -428,7 +430,7 @@ class TvpPlugin(Plugin):
             # TODO: add to settings
             'trans.sep': 'COLOR gray;I'.split(';'),
             'trans.time': {
-                None: '[]'.split(';'),
+                None: 'B;COLOR green;[]'.split(';'),
                 'future': 'COLOR gray;[]'.split(';'),
                 'finished': 'COLOR red;[]'.split(';'),
             },
@@ -838,7 +840,7 @@ class TvpPlugin(Plugin):
             stream = self.get_stream_of_type(streams, mimetype=mimetype)
             self._play(stream)
 
-    def station(self, code: PathArg, pvr_suffix):
+    def station(self, code: PathArg, pvr=None):
         date = datetime.today()
         program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index',
                                  params={'station_code': code, 'date': date}).get('data')
@@ -1457,23 +1459,45 @@ class TvpPlugin(Plugin):
                 else:
                     kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
+    def bitrate_calculator(bitrate):
+        bit = int(bitrate / 1000)
+        resolutions = ['424x240', '640x360', '768x432', '848x480', '1024x576', '1280x720', '1920x1080']
+
+        for res in resolutions:
+            if bit < 576:
+                i = 0
+            elif bit < 896:
+                i = 1
+            elif bit < 1088:
+                i = 2
+            elif bit < 1536:
+                i = 3
+            elif bit < 2176:
+                i = 4
+            elif bit < 3072:
+                i = 5
+            elif bit < 20000:
+                i = 6
+            else:
+                i = 0
+            break
+
+        return resolutions[i]
+
     def bitrate_selector_menu(streams):
         selector = []
 
         streams = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=True)
 
         for stream in streams:
-            bandwidth = int(stream['totalBitrate'] / 1000)
-            mimetype = stream['mimeType']
+            bitrate = stream['totalBitrate']
+            mimetype = stream['mimeType'].replace('application/', '')
+            resolution = stream['resolution']
 
-            if bandwidth > 3500:
-                res = f'1080p, Stream type: {mimetype}'
-            elif bandwidth > 2900 and bandwidth < 3500:
-                res = f'720p, Stream type: {mimetype}'
-            elif bandwidth > 2000 and bandwidth < 2900:
-                res = f'576p, Stream type: {mimetype}'
-            else:
-                res = f'480p, Stream type: {mimetype}'
+            if not resolution:
+                resolution = TvpPlugin.bitrate_calculator(bitrate)
+
+            res = f'(h264, {resolution}, {bitrate} bps) [{mimetype}]'
 
             selector.append(res)
 
@@ -1492,7 +1516,11 @@ class TvpPlugin(Plugin):
         settings = Settings()
 
         for stream in streams:
+            stream.setdefault('resolution', '')
             if 'video' not in stream['mimeType']:
+                if 'ism/manifest' in stream['url']:
+                    url = stream['url'].replace('/manifest', '/video.m3u8')
+                    stream.update({'url': url})
 
                 bandwidth = stream['totalBitrate']
 
@@ -1508,9 +1536,22 @@ class TvpPlugin(Plugin):
                 bandwidth_sorted = sorted(bandwidths, key=lambda d: (-int(d)), reverse=False)
                 bandwidth = bandwidth_sorted[0] if bandwidth_sorted else bandwidth
 
-                stream.update({'totalBitrate': int(bandwidth)})
+                resolution_tuple = (0, 0)
 
-        if settings.bitrate_selector == 0:
+                resolution_regex_a = re.compile(r'width="?(\d+)"? height="?(\d+)"?', re.DOTALL|re.IGNORECASE)
+                resolution_regex_b = re.compile(r'resolution=(\d+)x(\d+)', re.DOTALL|re.IGNORECASE)
+                resolutions = resolution_regex_a.findall(resp.text)
+                if not resolutions:
+                    resolutions = resolution_regex_b.findall(resp.text)
+
+                resolutions_sorted = sorted(resolutions, key=lambda d: (-int(d[0])), reverse=False)
+                resolution_tuple = resolutions_sorted[0] if resolutions_sorted else resolution_tuple
+                if resolution_tuple:
+                    resolution = str(resolution_tuple[0]) + 'x' + str(resolution_tuple[1])
+
+                stream.update({'totalBitrate': int(bandwidth), 'resolution': resolution})
+
+        if settings.bitrate_selector == 6:
             stream = TvpPlugin.bitrate_selector_menu(streams)
 
         else:
@@ -1534,7 +1575,7 @@ class TvpPlugin(Plugin):
                 stream = bandwidths[0] if bandwidths else None
 
             if not stream:
-                streams_by_mimetype = [d for d in streams if mimetype == d['mimeType']]
+                streams_by_mimetype = [d for d in streams if mimetype == d['mimeType'] and settings.bitrate_selector == 0] # defualt
                 if not streams_by_mimetype:
                     streams_by_mimetype = streams
                 stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
@@ -1557,8 +1598,6 @@ class TvpPlugin(Plugin):
 
         if 'material_niedostepny' not in stream['url']:
             url = stream['url']
-            if 'ism/manifest' in url:
-                url = url.replace('/manifest', '/video.m3u8')
 
             params = {}
             if begin:
