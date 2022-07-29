@@ -1533,6 +1533,8 @@ class TvpPlugin(Plugin):
             # highest quality
             if not stream:
                 streams_by_mimetype = [d for d in streams if mimetype == d['mimeType']]
+                if not streams_by_mimetype:
+                    streams_by_mimetype = streams
                 stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
 
         if not stream:
