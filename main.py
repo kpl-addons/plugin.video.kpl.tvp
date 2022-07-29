@@ -503,7 +503,7 @@ class TvpPlugin(Plugin):
             items = [item for item in items if
                      item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
 
-            if len(items) == 1 and items[0].get('object_type') == 'directory_video' and items[0]['title'] == 'wideo':
+            if len(items) == 1 and items[0]['web_name'] == 'wideo':
                 # Oszukany katalog sezonu, pokaż od razu odcinki.
                 data = self.site.listing(items[0]['asset_id'])
                 items = data.get('items') or ()
