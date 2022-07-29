@@ -840,7 +840,7 @@ class TvpPlugin(Plugin):
             stream = self.get_stream_of_type(streams, mimetype=mimetype)
             self._play(stream)
 
-    def station(self, code: PathArg, pvr_suffix):
+    def station(self, code: PathArg, pvr=None):
         date = datetime.today()
         program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index',
                                  params={'station_code': code, 'date': date}).get('data')
