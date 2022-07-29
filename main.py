@@ -1510,8 +1510,7 @@ class TvpPlugin(Plugin):
 
         return stream
 
-    @staticmethod
-    def iter_stream_of_type(streams, *, begin, end, live, timeshift, mimetype):
+    def iter_stream_of_type(self, streams, *, begin, end, live, timeshift, mimetype):
         settings = Settings()
 
         for stream in streams:
@@ -1554,22 +1553,22 @@ class TvpPlugin(Plugin):
             stream = TvpPlugin.bitrate_selector_menu(streams)
 
         else:
-            if settings.bitrate_selector == 1: # highest quality
+            if settings.bitrate_selector == 1:  # highest quality
                 stream = None
 
-            elif settings.bitrate_selector == 2: # 1080p
+            elif settings.bitrate_selector == 2:  # 1080p
                 bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
                 stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 3: # 720p
+            elif settings.bitrate_selector == 3:  # 720p
                 bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
                 stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 4: # 576p
+            elif settings.bitrate_selector == 4:  # 576p
                 bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
                 stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 5: # 480p
+            elif settings.bitrate_selector == 5:  # 480p
                 bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
                 stream = bandwidths[0] if bandwidths else None
 
@@ -1580,6 +1579,7 @@ class TvpPlugin(Plugin):
                 stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
 
         if not stream:
+            xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
             return
 
         mimetype = stream['mimeType']
@@ -1630,9 +1630,8 @@ class TvpPlugin(Plugin):
                                           3000, False)
             return
 
-    @staticmethod
-    def get_stream_of_type(streams, *, begin=None, end=None, live='', timeshift='', mimetype=None):
-        stream = TvpPlugin.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype)
+    def get_stream_of_type(self, streams, *, begin=None, end=None, live='', timeshift='', mimetype=None):
+        stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift, mimetype=mimetype)
         return stream
 
     def exception(self):
