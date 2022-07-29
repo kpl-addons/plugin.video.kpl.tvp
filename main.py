@@ -1466,11 +1466,11 @@ class TvpPlugin(Plugin):
             bandwidth = int(stream['totalBitrate'] / 1000)
             mimetype = stream['mimeType']
 
-            if bandwidth > 5000 and bandwidth < 10000:
+            if bandwidth > 3500 and bandwidth < 10000:
                 res = f'1080p, Stream type: {mimetype}'
-            elif bandwidth > 3500 and bandwidth < 5000:
+            elif bandwidth > 2500 and bandwidth < 3500:
                 res = f'720p, Stream type: {mimetype}'
-            elif bandwidth > 2000 and bandwidth < 3500:
+            elif bandwidth > 2000 and bandwidth < 2500:
                 res = f'576p, Stream type: {mimetype}'
             else:
                 res = f'480p, Stream type: {mimetype}'
@@ -1515,15 +1515,15 @@ class TvpPlugin(Plugin):
 
         else:
             if settings.bitrate_selector == 2: # 1080p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 5000 and int(d['totalBitrate'] / 1000) < 10000]
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
                 stream = bandwidths[0] if bandwidths else None
 
             elif settings.bitrate_selector == 3: # 720p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 5000]
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2500 and int(d['totalBitrate'] / 1000) < 3500]
                 stream = bandwidths[0] if bandwidths else None
 
             elif settings.bitrate_selector == 4: # 576p
-                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 3500]
+                bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2500]
                 stream = bandwidths[0] if bandwidths else None
 
             elif settings.bitrate_selector == 5: # 480p
