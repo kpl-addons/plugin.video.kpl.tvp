@@ -392,7 +392,9 @@ class TvpPlugin(Plugin):
         'wyniki-top',
         'statystyki-turnieju',
         'promocja-sport',
-        'video-import'
+        'video-import',
+        'obsada',
+        'tworcy'
     }
     vod_search = subobject()
 
@@ -428,7 +430,7 @@ class TvpPlugin(Plugin):
             # TODO: add to settings
             'trans.sep': 'COLOR gray;I'.split(';'),
             'trans.time': {
-                None: '[]'.split(';'),
+                None: 'B;COLOR green;[]'.split(';'),
                 'future': 'COLOR gray;[]'.split(';'),
                 'finished': 'COLOR red;[]'.split(';'),
             },

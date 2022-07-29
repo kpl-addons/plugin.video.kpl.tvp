@@ -251,3 +251,31 @@ msgstr "[Strefa ABO] Brak uprawnień"
 msgctxt "#30160"
 msgid "[B]Error[/B]"
 msgstr "[B]Błąd[/B]"
+
+msgctxt "#30161"
+msgid "Stream quality selection"
+msgstr "Wybór jakości"
+
+msgctxt "#30162"
+msgid "Manually"
+msgstr "Ręcznie"
+
+msgctxt "#30163"
+msgid "Select highest quality"
+msgstr "Najwyższa jakość"
+
+msgctxt "#30164"
+msgid "1080p"
+msgstr "1080p"
+
+msgctxt "#30165"
+msgid "720p"
+msgstr "720p"
+
+msgctxt "#30166"
+msgid "576p"
+msgstr "576p"
+
+msgctxt "#30167"
+msgid "480p"
+msgstr "480p"
