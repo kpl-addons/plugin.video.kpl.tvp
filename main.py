@@ -603,7 +603,7 @@ class TvpPlugin(Plugin):
             for prog in epgs.values():
                 cur = prog.current
                 if cur:
-                    if cur.id:
+                    if cur.get('data'):
                         prog._current = ChannelProgram({**con[cur.id]['data'], 'date_start': cur['date_start'], 'date_end': cur['date_end']})
         for item in stations:
             image = self._item_image(item, preferred='image_square')
@@ -887,32 +887,34 @@ class TvpPlugin(Plugin):
     def _play(self, stream):
         log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
-        if stream.proto:
-            is_helper = Helper(stream.proto)
-            if is_helper.check_inputstream():
+        if stream:
+            if stream.proto:
+                is_helper = Helper(stream.proto)
+                if is_helper.check_inputstream():
+                    play_item = xbmcgui.ListItem(path=stream.url)
+                    if stream.mime is not None:
+                        play_item.setMimeType(stream.mime)
+                    play_item.setContentLookup(False)
+                    play_item.setProperty('inputstream', is_helper.inputstream_addon)
+                    play_item.setProperty("IsPlayable", "true")
+                    play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
+                    play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
+                    play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
+                    play_item.setProperty('inputstream.adaptive.stream_headers', 'Referer: https://vod.tvp.pl/&User-Agent='+quote(UA))
+                    if KODI_VERSION >= 20:
+                        play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+                    if 'live=true' not in stream.url:
+                        play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
+                    xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
+            else:
                 play_item = xbmcgui.ListItem(path=stream.url)
                 if stream.mime is not None:
                     play_item.setMimeType(stream.mime)
                 play_item.setContentLookup(False)
-                play_item.setProperty('inputstream', is_helper.inputstream_addon)
                 play_item.setProperty("IsPlayable", "true")
-                play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
-                play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
-                play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
-                play_item.setProperty('inputstream.adaptive.stream_headers', 'Referer: https://vod.tvp.pl/&User-Agent='+quote(UA))
-                play_item.setProperty('StartOffset', '60.0')
-                if KODI_VERSION >= 20:
-                    play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
-                if 'live=true' not in stream.url:
-                    play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
                 xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
         else:
-            play_item = xbmcgui.ListItem(path=stream.url)
-            if stream.mime is not None:
-                play_item.setMimeType(stream.mime)
-            play_item.setContentLookup(False)
-            play_item.setProperty("IsPlayable", "true")
-            xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
+            self.play_failed()
 
     def _item_start_time(self, item):
         start = item.get('release_date_long', item.get('broadcast_start_long', 0)) / 1000
@@ -1455,60 +1457,87 @@ class TvpPlugin(Plugin):
                 else:
                     kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
 
-    def bitrate_selector(streams):
+    def bitrate_selector_menu(streams):
         selector = []
 
         streams = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=True)
 
         for stream in streams:
-            bitrate = int(stream['totalBitrate'] / 1000)
+            bandwidth = int(stream['totalBitrate'] / 1000)
             mimetype = stream['mimeType']
 
-            if bitrate >= 4000:
+            if bandwidth > 5000 and bandwidth < 10000:
                 res = f'1080p, Stream type: {mimetype}'
-            elif bitrate >= 1500:
+            elif bandwidth > 3500 and bandwidth < 5000:
                 res = f'720p, Stream type: {mimetype}'
-            elif bitrate >= 1200:
-                res = f'540p, Stream type: {mimetype}'
+            elif bandwidth > 2000 and bandwidth < 3500:
+                res = f'576p, Stream type: {mimetype}'
             else:
                 res = f'480p, Stream type: {mimetype}'
 
             selector.append(res)
 
         ret = xbmcgui.Dialog().select('Select stream', selector)
-        return streams[ret]
+        if ret == -1:
+            return None
+        elif ret >= 0:
+            stream = streams[ret]
+        else:
+            stream = streams[-1]
+
+        return stream
 
     @staticmethod
     def iter_stream_of_type(streams, *, begin, end, live, timeshift, mimetype):
         settings = Settings()
+
+        for stream in streams:
+            if 'video' not in stream['mimeType']:
+
+                bandwidth = stream['totalBitrate']
+
+                headers = {
+                    'User-Agent': 'okhttp/5.0.0-alpha.2',
+                    'Accept-Encoding': 'identity'
+                }
+
+                resp = requests.get(stream['url'], headers=headers)
+
+                bandwidth_regex = re.compile(r'bandwidth="?(\d+)"?', re.DOTALL|re.IGNORECASE)
+                bandwidths = bandwidth_regex.findall(resp.text)
+                bandwidth_sorted = sorted(bandwidths, key=lambda d: (-int(d)), reverse=False)
+                bandwidth = bandwidth_sorted[0] if bandwidth_sorted else bandwidth
+
+                stream.update({'totalBitrate': int(bandwidth)})
+
         if settings.bitrate_selector == 0:
-            stream = TvpPlugin.bitrate_selector(streams)
+            stream = TvpPlugin.bitrate_selector_menu(streams)
 
-        # highest quality
-        elif settings.bitrate_selector >= 1:
-            streams_ = [d for d in streams if mimetype == d['mimeType']]
+        else:
+            for i in range(2, 5):
+                if settings.bitrate_selector == 2: # 1080p
+                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 5000 and int(d['totalBitrate'] / 1000) < 10000]
+                    stream = bandwidths[0] if bandwidths else None
 
-            if not streams_:
-                streams_ = streams
+                elif settings.bitrate_selector == 3: # 720p
+                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 5000]
+                    stream = bandwidths[0] if bandwidths else None
 
-            # 1080p
-            elif settings.bitrate_selector == 2:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 4000][0])), reverse=True)[-1]
+                elif settings.bitrate_selector == 4: # 576p
+                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 3500]
+                    stream = bandwidths[0] if bandwidths else None
 
-            # 720p
-            elif settings.bitrate_selector == 3:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 1500][0])), reverse=True)[-1]
+                elif settings.bitrate_selector == 5: # 480p
+                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
+                    stream = bandwidths[0] if bandwidths else None
 
-            # 560p
-            elif settings.bitrate_selector == 4:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 1200][0])), reverse=True)[-1]
+            # highest quality
+            if not stream:
+                streams_by_mimetype = [d for d in streams if mimetype == d['mimeType']]
+                stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
 
-            # 480p
-            elif settings.bitrate_selector == 5:
-                stream = sorted(streams_, key=lambda d: (-int([d['totalBitrate'] for d in streams if d['totalBitrate'] / 1000 >= 0][0])), reverse=True)[-1]
-
-            else:
-                stream = sorted(streams_, key=lambda d: (-int(d['totalBitrate'])), reverse=True)[-1]
+        if not stream:
+            return
 
         mimetype = stream['mimeType']
 

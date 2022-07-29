@@ -273,7 +273,7 @@ msgid "720p"
 msgstr ""
 
 msgctxt "#30166"
-msgid "540p"
+msgid "576p"
 msgstr ""
 
 msgctxt "#30167"
