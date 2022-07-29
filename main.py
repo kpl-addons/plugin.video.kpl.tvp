@@ -477,7 +477,7 @@ class TvpPlugin(Plugin):
 
     def listing(self, id: PathArg[int], page=None, vid_type=None):
         """Use api.v3.tvp.pl JSON listing."""
-        per_page = 100  # liczba video na stonę
+        per_page = self.settings.per_page_limit  # liczba video na stonę
         # PAGE = None  # wszystko na raz na stronie
 
         # TODO:  determine `view`
@@ -508,16 +508,13 @@ class TvpPlugin(Plugin):
             if per_page and page is None:
                 if data.get('total_count') and data['total_count'] > per_page:
                     count = data['total_count']
-                    for n in range((count + per_page - 1) % per_page):
-                        if n == round(count / per_page):
-                            break
+                    for n in range(int(((count - 1) / per_page)) + 1):
+                        if etype == 'directory_video':
+                            kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='video'))
+                        elif etype == 'website':
+                            kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='website'))
                         else:
-                            if etype == 'directory_video':
-                                kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='video'))
-                            elif etype == 'website':
-                                kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1, vid_type='website'))
-                            else:
-                                kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
+                            kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
                     return
             items = [item for item in items if
                      item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]

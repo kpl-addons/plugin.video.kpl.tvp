@@ -45,10 +45,10 @@
 			<group id="12" label="30161">
 				<setting id="bitrate_selector" label="30161" type="integer">
 					<level>1</level>
-					<default>1</default>
+					<default>0</default>
 					<constraints>
 						<options>
-							<option label="30168">0</option>
+							<option label="30175">0</option>
 							<option label="30163">1</option>
 							<option label="30164">2</option>
 							<option label="30165">3</option>
@@ -58,7 +58,7 @@
 						</options>
 					</constraints>
 					<control type="list" format="string">
-						<heading>30124</heading>
+						<heading>30161</heading>
 					</control>
 				</setting>
 			</group>
@@ -91,6 +91,23 @@
 					</constraints>
 					<control type="list" format="string">
 						<heading>30138</heading>
+					</control>
+				</setting>
+				<setting id="per_page_limit" label="30168" type="integer">
+					<level>1</level>
+					<default>200</default>
+					<constraints>
+						<options>
+							<option label="30169">50</option>
+							<option label="30170">100</option>
+							<option label="30171">150</option>
+							<option label="30172">200</option>
+							<option label="30173">250</option>
+							<option label="30174">500</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30168</heading>
 					</control>
 				</setting>
 			</group>
