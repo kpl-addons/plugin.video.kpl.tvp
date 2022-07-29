@@ -1466,7 +1466,7 @@ class TvpPlugin(Plugin):
             bandwidth = int(stream['totalBitrate'] / 1000)
             mimetype = stream['mimeType']
 
-            if bandwidth > 3500 and bandwidth < 10000:
+            if bandwidth > 3500:
                 res = f'1080p, Stream type: {mimetype}'
             elif bandwidth > 2900 and bandwidth < 3500:
                 res = f'720p, Stream type: {mimetype}'
