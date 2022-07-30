@@ -964,6 +964,10 @@ class TvpPlugin(Plugin):
                     if is_live and resumetime and totaltime is not None:
                         play_item.setProperty('ResumeTime', resumetime)
                         play_item.setProperty('TotalTime', totaltime)
+                    elif is_live:
+                        play_item.setProperty('ResumeTime', '870')
+                        play_item.setProperty('TotalTime', '900')
+
                     xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
             else:
                 play_item = xbmcgui.ListItem(path=stream.url)
