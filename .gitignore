@@ -28,6 +28,9 @@ __pycache__
 *.code-workspace
 .vscode
 
+# pycharm
+.idea
+
 # doc
 doc/**/*.html
 /site

@@ -2,6 +2,26 @@
 	<section id="plugin.video.kpl.tvp">
 
 		<category id="tvp_main" label="30103" help="">
+			<group id="12" label="30161">
+				<setting id="bitrate_selector" label="30161" type="integer">
+					<level>1</level>
+					<default>0</default>
+					<constraints>
+						<options>
+							<option label="30175">0</option>
+							<option label="30163">1</option>
+							<option label="30164">2</option>
+							<option label="30165">3</option>
+							<option label="30166">4</option>
+							<option label="30167">5</option>
+							<option label="30162">6</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30161</heading>
+					</control>
+				</setting>
+			</group>
 			<group id="11" label="30145">
 				<setting id="script" type="string" label="30126" help="">
 					<visible>false</visible>
@@ -71,6 +91,23 @@
 					</constraints>
 					<control type="list" format="string">
 						<heading>30138</heading>
+					</control>
+				</setting>
+				<setting id="per_page_limit" label="30168" type="integer">
+					<level>1</level>
+					<default>200</default>
+					<constraints>
+						<options>
+							<option label="30169">50</option>
+							<option label="30170">100</option>
+							<option label="30171">150</option>
+							<option label="30172">200</option>
+							<option label="30173">250</option>
+							<option label="30174">500</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30168</heading>
 					</control>
 				</setting>
 			</group>

@@ -235,3 +235,79 @@ msgstr "Styl kanału"
 msgctxt "#30156"
 msgid "Program style"
 msgstr "Styl programu"
+
+msgctxt "#30157"
+msgid "Content not available"
+msgstr "Materiał niedostępny"
+
+msgctxt "#30158"
+msgid "[ABO zone] Access to content after entering the access data in the settings tab."
+msgstr "[Strefa ABO] Dostęp do materiału po wpisaniu danych dostępowych w zakładce ustawienia."
+
+msgctxt "#30159"
+msgid "[ABO zone] No authorization"
+msgstr "[Strefa ABO] Brak uprawnień"
+
+msgctxt "#30160"
+msgid "[B]Error[/B]"
+msgstr "[B]Błąd[/B]"
+
+msgctxt "#30161"
+msgid "Stream quality selection"
+msgstr "Wybór jakości strumienia"
+
+msgctxt "#30162"
+msgid "Manually"
+msgstr "Ręcznie"
+
+msgctxt "#30163"
+msgid "Maximum"
+msgstr "Maksymalny"
+
+msgctxt "#30164"
+msgid "High"
+msgstr "Wysoki"
+
+msgctxt "#30165"
+msgid "Average"
+msgstr "Średni"
+
+msgctxt "#30166"
+msgid "Low"
+msgstr "Niski"
+
+msgctxt "#30167"
+msgid "Very low"
+msgstr "Bardzo niski"
+
+msgctxt "#30168"
+msgid "Per page limit"
+msgstr "Limit na stronę"
+
+msgctxt "#30169"
+msgid "50 items"
+msgstr "50 pozycji"
+
+msgctxt "#30170"
+msgid "100 items"
+msgstr "100 pozycji"
+
+msgctxt "#30171"
+msgid "150 items"
+msgstr "150 pozycji"
+
+msgctxt "#30172"
+msgid "200 items"
+msgstr "200 pozycji"
+
+msgctxt "#30173"
+msgid "250 items"
+msgstr "250 pozycji"
+
+msgctxt "#30174"
+msgid "500 items"
+msgstr "500 pozycji"
+
+msgctxt "#30175"
+msgid "Default"
+msgstr "Domyślny"
