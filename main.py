@@ -43,6 +43,17 @@ CurrentAndFuture = object()
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
 
+class proxydt(datetime):
+    @staticmethod
+    def strptime(date_string, format):
+        import time
+        try:
+            res = datetime.strptime(date_string, format)
+        except:
+            res = datetime(*(time.strptime(date_string, format)[0:6]))
+        return res
+
+proxydt = proxydt
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -809,7 +820,7 @@ class TvpPlugin(Plugin):
         if not date:
             now = datetime.now()
             date = now.strftime("%Y-%m-%dT%H:%M:%S")
-        date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
+        date_obj = proxydt.strptime(date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
         timestamp = int((datetime.timestamp(date_obj) * 1000))
         epg = self.site.station_epg(code, date)
 
