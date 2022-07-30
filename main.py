@@ -1572,40 +1572,39 @@ class TvpPlugin(Plugin):
         if not catchup:
             if settings.bitrate_selector == 6:
                 stream = TvpPlugin.bitrate_selector_menu(streams)
+                if not stream:
+                    xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
+                    return
 
             else:
-                if settings.bitrate_selector == 1:  # highest quality
-                    stream = None
-
-                elif settings.bitrate_selector == 2:  # 1080p
+                if settings.bitrate_selector == 2:  # high
                     bandwidths = [d for d in streams if
                                   int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
                     stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 3:  # 720p
+                elif settings.bitrate_selector == 3:  # average
                     bandwidths = [d for d in streams if
                                   int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
                     stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 4:  # 576p
+                elif settings.bitrate_selector == 4:  # low
                     bandwidths = [d for d in streams if
                                   int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
                     stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 5:  # 480p
+                elif settings.bitrate_selector == 5:  # very low
                     bandwidths = [d for d in streams if
                                   int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
                     stream = bandwidths[0] if bandwidths else None
 
-                elif settings.bitrate_selector == 0 or not stream:
-                    streams_by_mimetype = [d for d in streams if mimetype == d['mimeType'] and settings.bitrate_selector == 0] # defualt
+                elif settings.bitrate_selector == 0:
+                    streams_by_mimetype = [d for d in streams if mimetype == d['mimeType']] # defualt
                     if not streams_by_mimetype:
                         streams_by_mimetype = streams
                     stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
 
-        if not stream and not catchup:
-            xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
-            return
+                else:
+                    stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
 
         mimetype = stream['mimeType']
 
