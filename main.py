@@ -1576,38 +1576,29 @@ class TvpPlugin(Plugin):
                     xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
                     return
 
-            else:
-                if settings.bitrate_selector == 2:  # high
-                    bandwidths = [d for d in streams if
-                                  int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
-                    stream = bandwidths[0] if bandwidths else None
-
-                elif settings.bitrate_selector == 3:  # average
-                    bandwidths = [d for d in streams if
-                                  int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
-                    stream = bandwidths[0] if bandwidths else None
-
-                elif settings.bitrate_selector == 4:  # low
-                    bandwidths = [d for d in streams if
-                                  int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
-                    stream = bandwidths[0] if bandwidths else None
-
-                elif settings.bitrate_selector == 5:  # very low
-                    bandwidths = [d for d in streams if
-                                  int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
-                    stream = bandwidths[0] if bandwidths else None
-
-                elif settings.bitrate_selector == 0: # defualt
-                    streams_by_mimetype = [d for d in streams if mimetype == d['mimeType']]
-                    if not streams_by_mimetype:
-                        streams_by_mimetype = streams
-                    stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
+            elif settings.bitrate_selector >= 0:
+                if settings.bitrate_selector == 0: # defualt
+                    stream = [d for d in streams if mimetype == d['mimeType']][-1]
 
                 else:
-                    stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0] # maximum
+                    possible_bitrates = [32, 40, 48, 56, 64, 112, 128, 160, 256, 512, 640, 10000]
+                    if settings.bitrate_selector == 2:  # high
+                        max_bitrate = possible_bitrates[-1]
+
+                    elif settings.bitrate_selector == 3: # average
+                        max_bitrate = possible_bitrates[:10][-1]
+
+                    elif settings.bitrate_selector == 4: # low
+                        max_bitrate = possible_bitrates[:6][-1]
+
+                    elif settings.bitrate_selector == 5: # very low
+                        max_bitrate = possible_bitrates[:3][-1]
+
+                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 10000) < max_bitrate]
+                    stream = bandwidths[0] if bandwidths else None
 
         if not stream:
-            stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
+            stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0] # maximum
 
         mimetype = stream['mimeType']
 
