@@ -815,21 +815,18 @@ class TvpPlugin(Plugin):
                         title = f'[I]{title}[/I]'
                         kdir.item(title, self.no_operation, image=img, info=info, label2=label2)
 
-    @entry(path='/iptv_catchup/<code>/<date>')
-    def _iptv_catchup_helper(self, code, date):
-        if not date:
-            now = datetime.now()
-            date = now.strftime("%Y-%m-%dT%H:%M:%S")
-        date_obj = proxydt.strptime(date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
+    @entry(path='/iptv_catchup/<code>/<target_date>')
+    def _iptv_catchup_helper(self, code, target_date):
+        date_obj = proxydt.strptime(target_date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
         timestamp = int((datetime.timestamp(date_obj) * 1000))
-        epg = self.site.station_epg(code, date)
+        epg = self.site.station_epg(code, target_date)
 
         for e in epg:
-            if timestamp == int(e['date_start']):
+            if int(e['date_start']) <= timestamp <= int(e['date_end']):
                 pid = e.get('record_id')
                 streams, mimetype = self.site.station_streams(station_code=code, record_id=pid)
                 if streams:
-                    stream = self.get_stream_of_type(streams, mimetype=mimetype)
+                    stream = self.get_stream_of_type(streams, mimetype=mimetype, catchup=True)
                     self._play(stream)
 
     def _epg_item(self, kdir, item, *, code=None, now=None):
@@ -867,7 +864,7 @@ class TvpPlugin(Plugin):
     def play_program(self, code, prog):
         streams, mimetype = self.site.station_streams(code, prog)
         if streams:
-            stream = self.get_stream_of_type(streams, mimetype=mimetype)
+            stream = self.get_stream_of_type(streams, mimetype=mimetype, catchup=False)
             self._play(stream)
 
     def station(self, code: PathArg, pvr=None):
@@ -913,7 +910,7 @@ class TvpPlugin(Plugin):
             mimetype = redir.get('mimeType')
 
             stream = self.get_stream_of_type(formats or (), begin=begin_tag, end=end_tag, live=live_tag,
-                                             timeshift=timeshift_tag, mimetype=mimetype)
+                                             timeshift=timeshift_tag, mimetype=mimetype, catchup=False)
             self._play(stream)
 
     def _play(self, stream):
@@ -1321,7 +1318,7 @@ class TvpPlugin(Plugin):
             stream = Stream(stream_url, '', '')
             if 'material_niedostepny' not in stream.url:
                 if 'formats' in resp:
-                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'])
+                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'], catchup=False)
                     if stream_url:
                         if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                                 and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
@@ -1534,7 +1531,7 @@ class TvpPlugin(Plugin):
 
         return stream
 
-    def iter_stream_of_type(self, streams, *, begin, end, live, timeshift, mimetype):
+    def iter_stream_of_type(self, streams, *, begin, end, live, timeshift, mimetype, catchup):
         settings = Settings()
 
         for stream in streams:
@@ -1572,40 +1569,41 @@ class TvpPlugin(Plugin):
 
                 stream.update({'totalBitrate': int(bandwidth), 'resolution': resolution})
 
-        if settings.bitrate_selector == 6:
-            stream = TvpPlugin.bitrate_selector_menu(streams)
+        if not catchup:
+            if settings.bitrate_selector == 6:
+                stream = TvpPlugin.bitrate_selector_menu(streams)
 
-        else:
-            if settings.bitrate_selector == 1:  # highest quality
-                stream = None
+            else:
+                if settings.bitrate_selector == 1:  # highest quality
+                    stream = None
 
-            elif settings.bitrate_selector == 2:  # 1080p
-                bandwidths = [d for d in streams if
-                              int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
-                stream = bandwidths[0] if bandwidths else None
+                elif settings.bitrate_selector == 2:  # 1080p
+                    bandwidths = [d for d in streams if
+                                  int(d['totalBitrate'] / 1000) > 3500 and int(d['totalBitrate'] / 1000) < 10000]
+                    stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 3:  # 720p
-                bandwidths = [d for d in streams if
-                              int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
-                stream = bandwidths[0] if bandwidths else None
+                elif settings.bitrate_selector == 3:  # 720p
+                    bandwidths = [d for d in streams if
+                                  int(d['totalBitrate'] / 1000) > 2900 and int(d['totalBitrate'] / 1000) < 3500]
+                    stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 4:  # 576p
-                bandwidths = [d for d in streams if
-                              int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
-                stream = bandwidths[0] if bandwidths else None
+                elif settings.bitrate_selector == 4:  # 576p
+                    bandwidths = [d for d in streams if
+                                  int(d['totalBitrate'] / 1000) > 2000 and int(d['totalBitrate'] / 1000) < 2900]
+                    stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 5:  # 480p
-                bandwidths = [d for d in streams if
-                              int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
-                stream = bandwidths[0] if bandwidths else None
+                elif settings.bitrate_selector == 5:  # 480p
+                    bandwidths = [d for d in streams if
+                                  int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
+                    stream = bandwidths[0] if bandwidths else None
 
-            elif settings.bitrate_selector == 0 or not stream:
-                streams_by_mimetype = [d for d in streams if mimetype == d['mimeType'] and settings.bitrate_selector == 0] # defualt
-                if not streams_by_mimetype:
-                    streams_by_mimetype = streams
-                stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
+                elif settings.bitrate_selector == 0 or not stream:
+                    streams_by_mimetype = [d for d in streams if mimetype == d['mimeType'] and settings.bitrate_selector == 0] # defualt
+                    if not streams_by_mimetype:
+                        streams_by_mimetype = streams
+                    stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
 
-        if not stream:
+        if not stream and not catchup:
             xbmcplugin.setResolvedUrl(self.handle, False, xbmcgui.ListItem())
             return
 
@@ -1657,9 +1655,9 @@ class TvpPlugin(Plugin):
                                           3000, False)
             return
 
-    def get_stream_of_type(self, streams, *, begin=None, end=None, live='', timeshift='', mimetype=None):
+    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live='', timeshift='', mimetype=None):
         stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
-                                          mimetype=mimetype)
+                                          mimetype=mimetype, catchup=catchup)
         return stream
 
     def exception(self):
