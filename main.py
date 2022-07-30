@@ -683,7 +683,7 @@ class TvpPlugin(Plugin):
                         kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'),
                                   image=image, **kwargs)
                 else:
-                    kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
+                    kdir.play(title, call(self.station, ch.code, '.pvr'), image=image, **kwargs)
 
     @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
@@ -692,7 +692,7 @@ class TvpPlugin(Plugin):
             for ch in self.channel_iter():
                 title = f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]'
                 if ch.code:
-                    kdir.play(title, call(self.station, ch.code), image=ch.img)
+                    kdir.play(title, call(self.station, ch.code, '.pvr'), image=ch.img)
                 else:
                     title += f' [COLOR gray]{ch.id}[/COLOR]'
                     kdir.play(title, call(self.video, ch.id), image=ch.img)
@@ -871,7 +871,7 @@ class TvpPlugin(Plugin):
             stream = self.get_stream_of_type(streams, mimetype=mimetype, catchup=False)
             self._play(stream)
 
-    def station(self, code: PathArg):
+    def station(self, code: PathArg, pvr=''):
         date = datetime.today()
         program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index',
                                  params={'station_code': code, 'date': date}).get('data')
