@@ -679,7 +679,7 @@ class TvpPlugin(Plugin):
                         kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'),
                                   image=image, **kwargs)
                 else:
-                    kdir.play(title, call(self.station, ch.code, '.pvr'), image=image, **kwargs)
+                    kdir.play(title, call(self.station, ch.code, ''), image=image, **kwargs)
 
     @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
@@ -688,7 +688,7 @@ class TvpPlugin(Plugin):
             for ch in self.channel_iter():
                 title = f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]'
                 if ch.code:
-                    kdir.play(title, call(self.station, ch.code, '.pvr'), image=ch.img)
+                    kdir.play(title, call(self.station, ch.code, ''), image=ch.img)
                 else:
                     title += f' [COLOR gray]{ch.id}[/COLOR]'
                     kdir.play(title, call(self.video, ch.id), image=ch.img)
@@ -935,6 +935,9 @@ class TvpPlugin(Plugin):
                         play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
                     if 'live=true' not in stream.url:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
+                    if 'live=true' in stream.url:
+                        play_item.setProperty('ResumeTime', str(self.settings.timeshift_buffer_offset * 60 - 30))
+                        play_item.setProperty('TotalTime', str(self.settings.timeshift_buffer_offset * 60))
                     xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
             else:
                 play_item = xbmcgui.ListItem(path=stream.url)
@@ -1637,6 +1640,15 @@ class TvpPlugin(Plugin):
 
             parsed_url = urlparse(url)
             parsed_query = parse_qs(parsed_url.query)
+
+            if self.settings.timeshift_format == 1:
+                now = datetime.utcnow()
+                begin_t = now - timedelta(minutes=self.settings.timeshift_buffer_offset)
+                begin_t = begin_t.strftime('%Y%m%dT%H%M%S')
+                to_replace = re.split('^.*begin=(.*?)', url)[2]
+                url = url.replace(to_replace, begin_t) + '&live=true&timeshift=true'
+                return Stream(url=url, proto=protocol, mime=mimetype)
+
             if parsed_query:
                 start_tag = '&'
             else:

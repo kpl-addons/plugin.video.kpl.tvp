@@ -22,6 +22,33 @@
 					</control>
 				</setting>
 			</group>
+			<group id="1" label="30176">
+				<setting id="timeshift_format" type="integer" label="30177" help="">
+					<level>0</level>
+					<default>0</default>
+					<constraints>
+						<options>
+							<option label="30178">0</option>
+							<option label="30179">1</option>
+						</options>
+					</constraints>
+					<control type="list" format="string">
+						<heading>30177</heading>
+					</control>
+				</setting>
+				<setting id="timeshift_buffer_offset" type="integer" label="30180" help="">
+					<level>0</level>
+					<default>0</default>
+					<dependencies>
+						<dependency type="enable">
+							<condition operator="is" setting="timeshift_format">1</condition>
+						</dependency>
+					</dependencies>
+					<control type="edit" format="integer">
+						<heading>30180</heading>
+					</control>
+				</setting>
+			</group>
 			<group id="11" label="30145">
 				<setting id="script" type="string" label="30126" help="">
 					<visible>false</visible>

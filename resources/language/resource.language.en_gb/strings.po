@@ -312,3 +312,22 @@ msgctxt "#30175"
 msgid "Default"
 msgstr ""
 
+msgctxt "#30176"
+msgid "Timeshift settings"
+msgstr ""
+
+msgctxt "#30177"
+msgid "Format timeshiftu"
+msgstr ""
+
+msgctxt "#30178"
+msgid "Default"
+msgstr ""
+
+msgctxt "#30179"
+msgid "Custom"
+msgstr ""
+
+msgctxt "#30180"
+msgid "Time offset in minutes"
+msgstr ""
