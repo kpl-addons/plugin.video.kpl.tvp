@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
 from html import unescape
 from datetime import datetime, timedelta
+import time
 import re
 from enum import IntEnum
 import xbmc  # for getCondVisibility and getInfoLabel
@@ -679,7 +680,7 @@ class TvpPlugin(Plugin):
                         kdir.menu(title, call(self.station_program, ch.code, f'{prog.start:%Y%m%d}'),
                                   image=image, **kwargs)
                 else:
-                    kdir.play(title, call(self.station, ch.code, ''), image=image, **kwargs)
+                    kdir.play(title, call(self.station, ch.code), image=image, **kwargs)
 
     @entry(title=L(30106, 'TV (HBB)'))
     def tv_hbb(self):
@@ -688,7 +689,7 @@ class TvpPlugin(Plugin):
             for ch in self.channel_iter():
                 title = f'{ch.name} [COLOR gray][{ch.code or ""}][/COLOR]'
                 if ch.code:
-                    kdir.play(title, call(self.station, ch.code, ''), image=ch.img)
+                    kdir.play(title, call(self.station, ch.code), image=ch.img)
                 else:
                     title += f' [COLOR gray]{ch.id}[/COLOR]'
                     kdir.play(title, call(self.video, ch.id), image=ch.img)
@@ -867,27 +868,33 @@ class TvpPlugin(Plugin):
             stream = self.get_stream_of_type(streams, mimetype=mimetype, catchup=False)
             self._play(stream)
 
-    def station(self, code: PathArg, pvr=None):
+    def station(self, code: PathArg):
         date = datetime.today()
         program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index',
                                  params={'station_code': code, 'date': date}).get('data')
 
         if program:
-            now = int(datetime.now().timestamp() * 1000)
-            begin_ts, end_ts = [(item['date_start'], item['date_end']) for item in program if
-                                item['date_start'] <= now <= item['date_end']][0]
-
-            begin_date = datetime.fromtimestamp(int(begin_ts) // 1000) - timedelta(hours=2)
-            end_date = datetime.fromtimestamp(int(end_ts) // 1000) - timedelta(hours=2)
-
-            begin_date = begin_date.strftime('%Y%m%dT%H%M%S')
-            end_date = end_date.strftime('%Y%m%dT%H%M%S')
-
-            begin_tag = begin_date
-            end_tag = end_date
-        else:
-            begin_tag = None
-            end_tag = None
+            timestamp = int(datetime.now().timestamp())
+            p_begin = None
+            for p in program:
+                if p['date_start'] / 1000 <= timestamp <= p['date_end'] / 1000:
+                    p_begin = p['date_start'] / 1000
+        # if program:
+        #     now = int(datetime.now().timestamp() * 1000)
+        #     begin_ts, end_ts = [(item['date_start'], item['date_end']) for item in program if
+        #                         item['date_start'] <= now <= item['date_end']][0]
+        #
+        #     begin_date = datetime.fromtimestamp(int(begin_ts) // 1000) - timedelta(hours=2)
+        #     end_date = datetime.fromtimestamp(int(end_ts) // 1000) - timedelta(hours=2)
+        #
+        #     begin_date = begin_date.strftime('%Y%m%dT%H%M%S')
+        #     end_date = end_date.strftime('%Y%m%dT%H%M%S')
+        #
+        #     begin_tag = begin_date
+        #     end_tag = end_date
+        # else:
+        #     begin_tag = None
+        #     end_tag = None
 
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
@@ -909,13 +916,29 @@ class TvpPlugin(Plugin):
 
             mimetype = redir.get('mimeType')
 
-            stream = self.get_stream_of_type(formats or (), begin=begin_tag, end=end_tag, live=live_tag,
+            stream = self.get_stream_of_type(formats or (), begin=p_begin, live=live_tag,
                                              timeshift=timeshift_tag, mimetype=mimetype, catchup=False)
-            self._play(stream)
+            self._play(stream, is_live=True)
 
-    def _play(self, stream):
+    def _play(self, stream, is_live=None):
         log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
+
+        resumetime = None
+        totaltime = None
+
+        if self.settings.timeshift_format == 1 and is_live:
+            resumetime = str(self.settings.timeshift_buffer_offset * 60 - 30)
+            totaltime = str(self.settings.timeshift_buffer_offset * 60)
+        elif self.settings.timeshift_format == 0 and is_live:
+            re_split = re.split('^.*begin=(.*?)', stream.url)
+            if len(re_split) >= 2:
+                now_timedelta = datetime.now() - timedelta(hours=2)
+                date_obj = proxydt.strptime(re_split[2], '%Y%m%dT%H%M%S')
+                total_seconds = int((now_timedelta - date_obj).total_seconds())
+                resumetime = str(total_seconds - 30)
+                totaltime = str(total_seconds)
+
         if stream:
             if stream.proto:
                 is_helper = Helper(stream.proto)
@@ -935,9 +958,9 @@ class TvpPlugin(Plugin):
                         play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
                     if 'live=true' not in stream.url:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
-                    if 'live=true' in stream.url:
-                        play_item.setProperty('ResumeTime', str(self.settings.timeshift_buffer_offset * 60 - 30))
-                        play_item.setProperty('TotalTime', str(self.settings.timeshift_buffer_offset * 60))
+                    if is_live and resumetime and totaltime is not None:
+                        play_item.setProperty('ResumeTime', resumetime)
+                        play_item.setProperty('TotalTime', totaltime)
                     xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
             else:
                 play_item = xbmcgui.ListItem(path=stream.url)
@@ -1622,41 +1645,49 @@ class TvpPlugin(Plugin):
         if 'material_niedostepny' not in stream['url']:
             url = stream['url']
 
-            params = {}
-            if begin:
-                tag = '?begin='
-                if 'begin=' in url:
-                    begin = re.sub(r'^\?begin=\d+T\d+', tag + begin, url)
-
-            if end and 'end=' not in url:
-                if 'begin=' in url:
-                    params.update({'end': end})
-
-            if live and 'live=' not in url:
-                params.update({'live': live})
-
-            if timeshift and 'timeshift=' not in url:
-                params.update({'timeshift': timeshift})
-
-            parsed_url = urlparse(url)
-            parsed_query = parse_qs(parsed_url.query)
+            # params = {}
+            # if begin:
+            #     tag = '?begin='
+            #     if 'begin=' in url:
+            #         begin = re.sub(r'^\?begin=\d+T\d+', tag + begin, url)
+            #
+            # if end and 'end=' not in url:
+            #     if 'begin=' in url:
+            #         params.update({'end': end})
+            #
+            # if live and 'live=' not in url:
+            #     params.update({'live': live})
+            #
+            # if timeshift and 'timeshift=' not in url:
+            #     params.update({'timeshift': timeshift})
+            #
+            # parsed_url = urlparse(url)
+            # parsed_query = parse_qs(parsed_url.query)
 
             if self.settings.timeshift_format == 1:
                 now = datetime.utcnow()
                 begin_t = now - timedelta(minutes=self.settings.timeshift_buffer_offset)
                 begin_t = begin_t.strftime('%Y%m%dT%H%M%S')
-                to_replace = re.split('^.*begin=(.*?)', url)[2]
-                url = url.replace(to_replace, begin_t) + '&live=true&timeshift=true'
+                re_split = re.split('^.*begin=(.*?)', url)
+                if len(re_split) >= 2:
+                    url = url.replace(re_split[2], begin_t)
+                return Stream(url=url, proto=protocol, mime=mimetype)
+            else:
+                begin_t = int(begin)
+                from_ts = (datetime.fromtimestamp(begin_t) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+                re_split = re.split('^.*begin=(.*?)', url)
+                if len(re_split) >= 2:
+                    url = url.replace(re_split[2], from_ts)
                 return Stream(url=url, proto=protocol, mime=mimetype)
 
-            if parsed_query:
-                start_tag = '&'
-            else:
-                start_tag = '?'
-
-            url_ = URL(url + start_tag + urlencode(params))
-
-            return Stream(url=url_, proto=protocol, mime=mimetype)
+            # if parsed_query:
+            #     start_tag = '&'
+            # else:
+            #     start_tag = '?'
+            #
+            # url_ = URL(url + start_tag + urlencode(params))
+            #
+            # return Stream(url=url_, proto=protocol, mime=mimetype)
 
         else:
             xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO,
