@@ -1583,7 +1583,7 @@ class TvpPlugin(Plugin):
                 else:
                     possible_bitrates = [32, 40, 48, 56, 64, 112, 128, 160, 256, 512, 640, 10000]
                     if settings.bitrate_selector == 2:  # high
-                        max_bitrate = possible_bitrates[-1]
+                        max_bitrate = possible_bitrates[:11][-1]
 
                     elif settings.bitrate_selector == 3: # average
                         max_bitrate = possible_bitrates[:10][-1]
@@ -1593,6 +1593,9 @@ class TvpPlugin(Plugin):
 
                     elif settings.bitrate_selector == 5: # very low
                         max_bitrate = possible_bitrates[:3][-1]
+
+                    else:
+                        max_bitrate = possible_bitrates[-1]
 
                     bandwidths = [d for d in streams if int(d['totalBitrate'] / 10000) < max_bitrate]
                     stream = bandwidths[0] if bandwidths else None
