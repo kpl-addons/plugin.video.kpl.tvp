@@ -1611,10 +1611,10 @@ class TvpPlugin(Plugin):
             params = {}
 
             url = stream['url']
-            duration = 0
+            duration = 0.0
 
             if begin and end:
-                duration = end - begin
+                duration = float(end - begin)
 
                 begin_date_obj = datetime.fromtimestamp(begin // 1000) - timedelta(hours=2)
                 p_begin = begin_date_obj.strftime('%Y%m%dT%H%M%S')
