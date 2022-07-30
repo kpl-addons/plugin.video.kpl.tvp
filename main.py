@@ -44,6 +44,7 @@ CurrentAndFuture = object()
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
 
+
 class proxydt(datetime):
     @staticmethod
     def strptime(date_string, format):
@@ -54,7 +55,9 @@ class proxydt(datetime):
             res = datetime(*(time.strptime(date_string, format)[0:6]))
         return res
 
+
 proxydt = proxydt
+
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -1344,7 +1347,8 @@ class TvpPlugin(Plugin):
             stream = Stream(stream_url, '', '')
             if 'material_niedostepny' not in stream.url:
                 if 'formats' in resp:
-                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'], catchup=False)
+                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'], catchup=False,
+                                                     live=False)
                     if stream_url:
                         if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                                 and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
@@ -1603,7 +1607,7 @@ class TvpPlugin(Plugin):
                     return
 
             elif settings.bitrate_selector >= 0:
-                if settings.bitrate_selector == 0: # defualt
+                if settings.bitrate_selector == 0:  # defualt
                     stream = [d for d in streams if mimetype == d['mimeType']][-1]
 
                 else:
@@ -1611,13 +1615,13 @@ class TvpPlugin(Plugin):
                     if settings.bitrate_selector == 2:  # high
                         max_bitrate = possible_bitrates[:11][-1]
 
-                    elif settings.bitrate_selector == 3: # average
+                    elif settings.bitrate_selector == 3:  # average
                         max_bitrate = possible_bitrates[:10][-1]
 
-                    elif settings.bitrate_selector == 4: # low
+                    elif settings.bitrate_selector == 4:  # low
                         max_bitrate = possible_bitrates[:6][-1]
 
-                    elif settings.bitrate_selector == 5: # very low
+                    elif settings.bitrate_selector == 5:  # very low
                         max_bitrate = possible_bitrates[:3][-1]
 
                     else:
@@ -1627,7 +1631,7 @@ class TvpPlugin(Plugin):
                     stream = bandwidths[0] if bandwidths else None
 
         if not stream:
-            stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0] # maximum
+            stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]  # maximum
 
         mimetype = stream['mimeType']
 
@@ -1645,56 +1649,31 @@ class TvpPlugin(Plugin):
         if 'material_niedostepny' not in stream['url']:
             url = stream['url']
 
-            # params = {}
-            # if begin:
-            #     tag = '?begin='
-            #     if 'begin=' in url:
-            #         begin = re.sub(r'^\?begin=\d+T\d+', tag + begin, url)
-            #
-            # if end and 'end=' not in url:
-            #     if 'begin=' in url:
-            #         params.update({'end': end})
-            #
-            # if live and 'live=' not in url:
-            #     params.update({'live': live})
-            #
-            # if timeshift and 'timeshift=' not in url:
-            #     params.update({'timeshift': timeshift})
-            #
-            # parsed_url = urlparse(url)
-            # parsed_query = parse_qs(parsed_url.query)
+            if live:
+                if self.settings.timeshift_format == 1:
+                    now = datetime.utcnow()
+                    begin_t = now - timedelta(minutes=self.settings.timeshift_buffer_offset)
+                    begin_t = begin_t.strftime('%Y%m%dT%H%M%S')
+                    re_split = re.split('^.*begin=(.*?)', url)
+                    if len(re_split) >= 2:
+                        url = url.replace(re_split[2], begin_t)
+                    return Stream(url=url, proto=protocol, mime=mimetype)
+                else:
+                    begin_t = int(begin)
+                    from_ts = (datetime.fromtimestamp(begin_t) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+                    re_split = re.split('^.*begin=(.*?)', url)
+                    if len(re_split) >= 2:
+                        url = url.replace(re_split[2], from_ts)
+                    return Stream(url=url, proto=protocol, mime=mimetype)
 
-            if self.settings.timeshift_format == 1:
-                now = datetime.utcnow()
-                begin_t = now - timedelta(minutes=self.settings.timeshift_buffer_offset)
-                begin_t = begin_t.strftime('%Y%m%dT%H%M%S')
-                re_split = re.split('^.*begin=(.*?)', url)
-                if len(re_split) >= 2:
-                    url = url.replace(re_split[2], begin_t)
-                return Stream(url=url, proto=protocol, mime=mimetype)
-            else:
-                begin_t = int(begin)
-                from_ts = (datetime.fromtimestamp(begin_t) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
-                re_split = re.split('^.*begin=(.*?)', url)
-                if len(re_split) >= 2:
-                    url = url.replace(re_split[2], from_ts)
-                return Stream(url=url, proto=protocol, mime=mimetype)
-
-            # if parsed_query:
-            #     start_tag = '&'
-            # else:
-            #     start_tag = '?'
-            #
-            # url_ = URL(url + start_tag + urlencode(params))
-            #
-            # return Stream(url=url_, proto=protocol, mime=mimetype)
+            return Stream(url=url, proto=protocol, mime=mimetype)
 
         else:
             xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO,
                                           3000, False)
             return
 
-    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live='', timeshift='', mimetype=None):
+    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live=False, timeshift='', mimetype=None):
         stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
                                           mimetype=mimetype, catchup=catchup)
         return stream
