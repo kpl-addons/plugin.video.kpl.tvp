@@ -822,7 +822,7 @@ class TvpPlugin(Plugin):
         epg = self.site.station_epg(code, target_date)
 
         for e in epg:
-            if int(e['date_start']) <= timestamp <= int(e['date_end']):
+            if timestamp == e['date_start']:
                 pid = e.get('record_id')
                 streams, mimetype = self.site.station_streams(station_code=code, record_id=pid)
                 if streams:
