@@ -959,14 +959,14 @@ class TvpPlugin(Plugin):
                                           'Referer: https://vod.tvp.pl/&User-Agent=' + quote(UA))
                     if KODI_VERSION >= 20:
                         play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
-                    if 'live=true' not in stream.url:
-                        play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
                     if is_live and resumetime and totaltime is not None:
                         play_item.setProperty('ResumeTime', resumetime)
                         play_item.setProperty('TotalTime', totaltime)
                     elif is_live:
                         play_item.setProperty('ResumeTime', '870')
                         play_item.setProperty('TotalTime', '900')
+                    else:
+                        play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
 
                     xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
             else:
