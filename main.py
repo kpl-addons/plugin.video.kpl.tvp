@@ -806,6 +806,9 @@ class TvpPlugin(Plugin):
 
     @entry(path='/iptv_catchup/<code>/<date>')
     def _iptv_catchup_helper(self, code, date):
+        if not date:
+            now = datetime.now()
+            date = now.strftime("%Y-%m-%dT%H:%M:%S")
         date_obj = datetime.strptime(date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
         timestamp = int((datetime.timestamp(date_obj) * 1000))
         epg = self.site.station_epg(code, date)
@@ -1585,9 +1588,8 @@ class TvpPlugin(Plugin):
                               int(d['totalBitrate'] / 1000) > 0 and int(d['totalBitrate'] / 1000) < 2000]
                 stream = bandwidths[0] if bandwidths else None
 
-            if not stream:
-                streams_by_mimetype = [d for d in streams if
-                                       mimetype == d['mimeType'] and settings.bitrate_selector == 0]  # defualt
+            elif settings.bitrate_selector == 0 or not stream:
+                streams_by_mimetype = [d for d in streams if mimetype == d['mimeType'] and settings.bitrate_selector == 0] # defualt
                 if not streams_by_mimetype:
                     streams_by_mimetype = streams
                 stream = sorted(streams_by_mimetype, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]
