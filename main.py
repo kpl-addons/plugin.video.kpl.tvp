@@ -931,7 +931,7 @@ class TvpPlugin(Plugin):
         totaltime = None
 
         if self.settings.timeshift_format == 1 and is_live:
-            resumetime = str(self.settings.timeshift_buffer_offset * 60 - 30)
+            resumetime = str(self.settings.timeshift_buffer_offset * 60 - 5)
             totaltime = str(self.settings.timeshift_buffer_offset * 60)
         elif self.settings.timeshift_format == 0 and is_live:
             re_split = re.split('^.*begin=(.*?)', stream.url)
@@ -939,7 +939,7 @@ class TvpPlugin(Plugin):
                 now_timedelta = datetime.now() - timedelta(hours=2)
                 date_obj = proxydt.strptime(re_split[2], '%Y%m%dT%H%M%S')
                 total_seconds = int((now_timedelta - date_obj).total_seconds())
-                resumetime = str(total_seconds - 30)
+                resumetime = str(total_seconds - 5)
                 totaltime = str(total_seconds)
 
         if stream:
@@ -963,7 +963,7 @@ class TvpPlugin(Plugin):
                         play_item.setProperty('ResumeTime', resumetime)
                         play_item.setProperty('TotalTime', totaltime)
                     elif is_live:
-                        play_item.setProperty('ResumeTime', '870')
+                        play_item.setProperty('ResumeTime', '895')
                         play_item.setProperty('TotalTime', '900')
                     else:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
