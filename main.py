@@ -1597,7 +1597,7 @@ class TvpPlugin(Plugin):
                     else:
                         max_bitrate = possible_bitrates[-1]
 
-                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 10000) < max_bitrate]
+                    bandwidths = [d for d in streams if int(d['totalBitrate'] / 10000) <= max_bitrate]
                     stream = bandwidths[0] if bandwidths else None
 
         if not stream:
