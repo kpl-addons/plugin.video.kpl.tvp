@@ -269,8 +269,8 @@ msgid "High"
 msgstr "Wysoki"
 
 msgctxt "#30165"
-msgid "Średni"
-msgstr ""
+msgid "Average"
+msgstr "Średni"
 
 msgctxt "#30166"
 msgid "Low"
