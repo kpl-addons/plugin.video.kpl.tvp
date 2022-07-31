@@ -1622,7 +1622,8 @@ class TvpPlugin(Plugin):
 
             if live:
                 if self.settings.timeshift_format == 1:
-                    begin_date_obj = datetime.utcnow() - timedelta(minutes=self.settings.timeshift_buffer_offset)
+                    max_offset = min(self.settings.timeshift_buffer_offset, 2160)
+                    begin_date_obj = datetime.utcnow() - timedelta(minutes=max_offset)
                     begin_str = begin_date_obj.strftime('%Y%m%dT%H%M%S')
 
                 else:
