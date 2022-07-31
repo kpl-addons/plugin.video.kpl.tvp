@@ -894,7 +894,7 @@ class TvpPlugin(Plugin):
             elif self.settings.timeshift_format == 0:
                 if stream.begin:
                     now_timedelta = datetime.now() - timedelta(hours=2)
-                    date_obj = proxydt.strptime(stream.begin, '%Y%m%dT%H%M%S')
+                    date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
                     total_seconds = int((now_timedelta - date_obj).total_seconds())
 
                     resume_time = str(total_seconds - 5)
