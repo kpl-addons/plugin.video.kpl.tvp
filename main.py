@@ -926,8 +926,8 @@ class TvpPlugin(Plugin):
                             video_info.setResumePoint(100.0, stream.duration)
                             video_info.setDuration(int(stream.duration))
                         else:
-                            play_item.setProperty('ResumeTime', stream.duration)
-                            play_item.setProperty('TotalTime ', stream.duration)
+                            play_item.setProperty('ResumeTime', str(stream.duration))
+                            play_item.setProperty('TotalTime ', str(stream.duration))
                     else:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
 
