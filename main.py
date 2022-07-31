@@ -1310,7 +1310,7 @@ class TvpPlugin(Plugin):
                                         self.play_failed()
         else:  # free
             log(f'free video: {id}', title='TVP')
-            stream = Stream(stream_url, '', '')
+            stream = Stream(stream_url, '', '', '')
             if 'material_niedostepny' not in stream.url:
                 if 'formats' in resp:
                     stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'], catchup=False,
