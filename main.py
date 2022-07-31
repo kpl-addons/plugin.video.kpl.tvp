@@ -892,6 +892,7 @@ class TvpPlugin(Plugin):
                 total_time = str(self.settings.timeshift_buffer_offset * 60)
 
             elif self.settings.timeshift_format == 0:
+
                 if stream.begin:
                     now_timedelta = datetime.now() - timedelta(hours=2)
                     date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
@@ -1617,6 +1618,7 @@ class TvpPlugin(Plugin):
 
             url = stream['url']
             begin_str = None
+            end_str = None
 
             if live:
                 if self.settings.timeshift_format == 1:
