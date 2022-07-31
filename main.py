@@ -10,13 +10,12 @@ from libka.calendar import str2date
 from libka.search import search, Search
 from libka.settings import Settings
 from pdom import select as dom_select
-from urllib.parse import urlencode, urlparse, parse_qs, quote
+from urllib.parse import quote
 import json
 from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
 from html import unescape
 from datetime import datetime, timedelta
-import time
 import re
 from enum import IntEnum
 import xbmc  # for getCondVisibility and getInfoLabel
@@ -44,21 +43,6 @@ CurrentAndFuture = object()
 
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
-
-
-class proxydt(datetime):
-    @staticmethod
-    def strptime(date_string, format):
-        import time
-        try:
-            res = datetime.strptime(date_string, format)
-        except:
-            res = datetime(*(time.strptime(date_string, format)[0:6]))
-        return res
-
-
-proxydt = proxydt
-
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -232,7 +216,7 @@ class TvpSite(Site):
     def __init__(self, base='https://www.api.v3.tvp.pl/', *args, count=None, verify_ssl=False, **kwargs):
         super().__init__(base, *args, verify_ssl=verify_ssl, **kwargs)
         self.count = count
-        self.dT = timedelta(minutes=5)  # time epsilon (extrnd filter time range)
+        self.dT = timedelta(minutes=5)  # time epsilon (extend filter time range)
 
     def listing(self, parent_id, *, dump='json', direct=True, **kwargs):
         count = kwargs.pop('count', self.count)
@@ -355,7 +339,7 @@ class TvpPlugin(Plugin):
             Menu(call='replay_list'),
         ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
-        # Menu(title='Rekonstrucja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
+        # Menu(title='Rekonstrukcja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
         Menu(title=L(30119, 'Sport'), items=[
             Menu(title=L(30117, 'Broadcast'), call=call('transmissions', 13010508)),
             Menu(title=L(30114, 'Rebroadcast'), id=48583081),
@@ -495,8 +479,8 @@ class TvpPlugin(Plugin):
 
     def listing(self, id: PathArg[int], page=None, vid_type=None):
         """Use api.v3.tvp.pl JSON listing."""
-        per_page = self.settings.per_page_limit  # liczba video na stonę
-        # PAGE = None  # wszystko na raz na stronie
+        per_page = self.settings.per_page_limit  # liczba video na stronę
+        # PAGE = None # wszystko na raz na stronie
 
         # TODO:  determine `view`
         with self.site.concurrent() as con:
@@ -539,7 +523,7 @@ class TvpPlugin(Plugin):
                             kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
                     return
 
-            # Analiza szcegółów, w tym dokładnych opisów i danych video
+            # Analiza szczegółów, w tym dokładnych opisów i danych video
             if self.settings.api_details:
                 has_extra = False
                 with self.site.concurrent() as con:
@@ -572,7 +556,7 @@ class TvpPlugin(Plugin):
                             item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
                                               if it.get('object_type') == 'video' and it.get('playable')]
 
-            # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
+            # Zwykłe katalogi (albo odcinki bezpośrednio z szukanego).
             if vid_type == 'website':
                 with self.site.concurrent() as con:
                     con.a.data.listing(id)
@@ -824,7 +808,8 @@ class TvpPlugin(Plugin):
 
     @entry(path='/iptv_catchup/<code>/<target_date>')
     def _iptv_catchup_helper(self, code, target_date):
-        date_obj = proxydt.strptime(target_date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
+        log(f' TARGET _ DATE : {target_date}')
+        date_obj = datetime.strptime(target_date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
         timestamp = int((datetime.timestamp(date_obj) * 1000))
         epg = self.site.station_epg(code, target_date)
 
@@ -973,7 +958,7 @@ class TvpPlugin(Plugin):
         return end
 
     def transmissions(self, id: PathArg, date=None):
-        """Live transmistions (sport: 13010508, parlament: 4422078)."""
+        """Live transmission (sport: 13010508, parlament: 4422078)."""
         now = datetime.utcnow()
         local_now = now + self.tz_offset
         local_prev = datetime.fromtimestamp(86400)
@@ -1111,7 +1096,7 @@ class TvpPlugin(Plugin):
                 menu.append((f'!!! {iid}', self.exception))
         if self.settings.debugging:
             menu.append((f'ID {iid}', self.refresh))
-            menu.append((f'Playlable {playable}', self.refresh))
+            menu.append((f'Playable {playable}', self.refresh))
             for pid in item.get('parents', ()):
                 # menu.append((f'Parent {pid}', call(self.refresh, call(self.listing, id=pid))))
                 menu.append((f'Parent {pid}', call(self.listing, id=pid)))
@@ -1487,7 +1472,7 @@ class TvpPlugin(Plugin):
                                      'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
                 item = json.loads(unescape(jsdata))
                 # log(f'VS: {item!r}')
-                sid = item['myListId']  # seris link
+                sid = item['myListId']  # series link
                 title = item['title']
                 episode = item.get('episodeCount')
                 if episode:
@@ -1588,7 +1573,7 @@ class TvpPlugin(Plugin):
                     return
 
             elif settings.bitrate_selector >= 0:
-                if settings.bitrate_selector == 0:  # defualt
+                if settings.bitrate_selector == 0:  # default
                     stream = [d for d in streams if mimetype == d['mimeType']][-1]
 
                 else:
@@ -1690,7 +1675,9 @@ class TvpPlugin(Plugin):
 
         for ch in self.channel_iter_stations():
             url = self.mkurl(self.station, code=ch.code)
-            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default"' 'catchup-source="plugin://plugin.video.kpl.tvp/iptv_catchup/' + ch.code + '/{Y}-{m}-{d}T{H}:{M}:{S}" catchup-days="7",' + f'{ch.name}\n{url}\n'
+            catch_url = self.mkurl(self._iptv_catchup_helper, ch.code, '{Y}-{m}-{d}T{H}:{M}:{S}')
+            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default" ' \
+                    f'catchup-source="{catch_url}" catchup-days="7",' + f'{ch.name}\n{url}\n'
 
         try:
             f = xbmcvfs.File(path_m3u + file_name, 'w')
