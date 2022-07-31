@@ -578,7 +578,9 @@ class TvpPlugin(Plugin):
                     con.a.data.listing(id)
                     con.a.details.details(id)
                 data = con.a.data
-                a_id = data['items'][0]['asset_id']
+                items = [item for item in data['items'] if
+                         item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
+                a_id = items[0]['asset_id']
                 items = self.site.listing(a_id, count=per_page, page=page).get('items')
                 for item in items:
                     self._item(kdir, item)
