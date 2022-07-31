@@ -1622,7 +1622,7 @@ class TvpPlugin(Plugin):
             if begin and end:
                 duration = float(end - begin)
 
-                begin_date_obj = datetime.fromtimestamp(begin // 1000)# - timedelta(hours=2)
+                begin_date_obj = datetime.fromtimestamp(begin // 1000) - timedelta(hours=2)
                 p_begin = begin_date_obj.strftime('%Y%m%dT%H%M%S')
 
                 end_date_obj = datetime.fromtimestamp(end // 1000) - timedelta(hours=2)
