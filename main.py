@@ -1616,6 +1616,7 @@ class TvpPlugin(Plugin):
             params = {}
 
             url = stream['url']
+            begin_str = None
 
             if live:
                 if self.settings.timeshift_format == 1:
