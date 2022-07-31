@@ -906,7 +906,7 @@ class TvpPlugin(Plugin):
             if stream.proto:
                 is_helper = Helper(stream.proto)
                 if is_helper.check_inputstream():
-                    videoinfo = xbmc.InfoTagVideo(offscreen=False)
+                    video_info = xbmc.InfoTagVideo(offscreen=False)
                     play_item = xbmcgui.ListItem(path=stream.url)
                     if stream.mime is not None:
                         play_item.setMimeType(stream.mime)
@@ -920,8 +920,14 @@ class TvpPlugin(Plugin):
                                           'Referer: https://vod.tvp.pl/&User-Agent=' + quote(UA))
                     if KODI_VERSION >= 20:
                         play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+
                     if stream.is_live:
-                        resume = videoinfo.setResumePoint(100.0, stream.duration)
+                        if KODI_VERSION >= 20:
+                            video_info.setResumePoint(100.0, stream.duration)
+                            video_info.setDuration(int(stream.duration))
+                        else:
+                            play_item.setProperty('ResumeTime', stream.duration)
+                            play_item.setProperty('TotalTime ', stream.duration)
                     else:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
 
@@ -1616,7 +1622,7 @@ class TvpPlugin(Plugin):
             if begin and end:
                 duration = float(end - begin)
 
-                begin_date_obj = datetime.fromtimestamp(begin // 1000) - timedelta(hours=2)
+                begin_date_obj = datetime.fromtimestamp(begin // 1000)# - timedelta(hours=2)
                 p_begin = begin_date_obj.strftime('%Y%m%dT%H%M%S')
 
                 end_date_obj = datetime.fromtimestamp(end // 1000) - timedelta(hours=2)
@@ -1624,9 +1630,11 @@ class TvpPlugin(Plugin):
 
                 begin_tag = '?begin='
 
-                if p_begin:
-                    if begin_tag in url:
+                if begin_tag in url:
+                    if p_begin:
                         url = re.sub(r'\?begin=\d+T\d+', begin_tag + p_begin, url)
+                else:
+                    params.update({'begin': p_begin})
 
                 if p_end and 'end=' not in url:
                     if begin_tag in url:
