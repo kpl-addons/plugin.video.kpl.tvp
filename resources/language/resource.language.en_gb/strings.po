@@ -93,7 +93,7 @@ msgid "Playlist M3U generated"
 msgstr ""
 
 msgctxt "#30137"
-msgid "Porgram"
+msgid "Program"
 msgstr ""
 
 msgctxt "#30101"
