@@ -24,6 +24,7 @@ import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
 import xbmcvfs  # for file in m3u generator
 import requests
+from requests.models import PreparedRequest
 
 try:
     from ttml2ssa import Ttml2SsaAddon
@@ -134,7 +135,7 @@ def image_link(image):
 
 
 StreamType = namedtuple('StreamType', 'proto mime')
-Stream = namedtuple('Stream', 'url proto mime')
+Stream = namedtuple('Stream', 'url proto mime begin')
 EuVideo = namedtuple('EuVideo', 'width height rate url')
 
 ChannelInfo = namedtuple('ChannelInfo', 'code name image id epg', defaults=(None,))
@@ -884,94 +885,63 @@ class TvpPlugin(Plugin):
             for p in program:
                 if p['date_start'] / 1000 <= timestamp <= p['date_end'] / 1000:
                     p_begin = p['date_start'] / 1000
-        # if program:
-        #     now = int(datetime.now().timestamp() * 1000)
-        #     begin_ts, end_ts = [(item['date_start'], item['date_end']) for item in program if
-        #                         item['date_start'] <= now <= item['date_end']][0]
-        #
-        #     begin_date = datetime.fromtimestamp(int(begin_ts) // 1000) - timedelta(hours=2)
-        #     end_date = datetime.fromtimestamp(int(end_ts) // 1000) - timedelta(hours=2)
-        #
-        #     begin_date = begin_date.strftime('%Y%m%dT%H%M%S')
-        #     end_date = end_date.strftime('%Y%m%dT%H%M%S')
-        #
-        #     begin_tag = begin_date
-        #     end_tag = end_date
-        # else:
-        #     begin_tag = None
-        #     end_tag = None
+                    p_end = p['date_end'] / 1000
 
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
         if data:
             redir = self.site.jget(data['stream_url'])
             formats = redir.get('formats')
-
-            live = redir.get('live')
-            if live:
-                live_tag = 'true'
-            else:
-                live_tag = 'false'
-
-            timeshift = redir.get('timeShift')
-            if timeshift:
-                timeshift_tag = 'true'
-            else:
-                timeshift_tag = 'false'
-
             mimetype = redir.get('mimeType')
 
-            stream = self.get_stream_of_type(formats or (), begin=p_begin, live=live_tag,
-                                             timeshift=timeshift_tag, mimetype=mimetype, catchup=False)
+            stream = self.get_stream_of_type(formats or (), begin=p_begin, end=p_end, mimetype=mimetype, live=True, catchup=False)
             self._play(stream, is_live=True)
 
-    def _play(self, stream, is_live=None):
+    def _play(self, stream, is_live=None, resume_time=None, total_time=None):
         log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
 
-        resumetime = None
-        totaltime = None
+        if is_live:
+            if self.settings.timeshift_format == 1:
+                resume_time = str(self.settings.timeshift_buffer_offset * 60 - 5)
+                total_time = str(self.settings.timeshift_buffer_offset * 60)
 
-        if self.settings.timeshift_format == 1 and is_live:
-            resumetime = str(self.settings.timeshift_buffer_offset * 60 - 5)
-            totaltime = str(self.settings.timeshift_buffer_offset * 60)
-        elif self.settings.timeshift_format == 0 and is_live:
-            re_split = re.split('^.*begin=(.*?)', stream.url)
-            if len(re_split) >= 2:
-                now_timedelta = datetime.now() - timedelta(hours=2)
-                date_obj = proxydt.strptime(re_split[2], '%Y%m%dT%H%M%S')
-                total_seconds = int((now_timedelta - date_obj).total_seconds())
-                resumetime = str(total_seconds - 5)
-                totaltime = str(total_seconds)
+            elif self.settings.timeshift_format == 0:
+                if stream.begin:
+                    now_timedelta = datetime.now() - timedelta(hours=2)
+                    date_obj = proxydt.strptime(stream.begin, '%Y%m%dT%H%M%S')
+                    total_seconds = int((now_timedelta - date_obj).total_seconds())
+
+                    resume_time = str(total_seconds - 5)
+                    if not resume_time:
+                        resume_time = 895
+
+                    total_time = str(total_seconds)
+                    if not total_time:
+                        total_time = 900
 
         if stream:
             if stream.proto:
                 is_helper = Helper(stream.proto)
                 if is_helper.check_inputstream():
+                    video_info = xbmc.InfoTagVideo(offscreen=False)
                     play_item = xbmcgui.ListItem(path=stream.url)
-                    if stream.mime is not None:
+                    if stream.mime:
                         play_item.setMimeType(stream.mime)
                     play_item.setContentLookup(False)
                     play_item.setProperty('inputstream', is_helper.inputstream_addon)
                     play_item.setProperty("IsPlayable", "true")
+                    play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
                     play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
-                    play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
                     play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
                     play_item.setProperty('inputstream.adaptive.stream_headers',
                                           'Referer: https://vod.tvp.pl/&User-Agent=' + quote(UA))
-                    if KODI_VERSION >= 20:
-                        videoinfo = xbmc.InfoTagVideo(offscreen=False)
-                        play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
-                        if is_live and resumetime and totaltime is not None:
-                            videoinfo.setResumePoint(float(resumetime), float(totaltime))
-                        elif is_live:
-                            videoinfo.setResumePoint(895.0, 900.0)
-                    if is_live and resumetime and totaltime is not None:
-                        play_item.setProperty('ResumeTime', resumetime)
-                        play_item.setProperty('TotalTime', totaltime)
-                    elif is_live:
-                        play_item.setProperty('ResumeTime', '895')
-                        play_item.setProperty('TotalTime', '900')
+                    if is_live:
+                        if KODI_VERSION >= 20:
+                            video_info.setResumePoint(float(resume_time), float(total_time))
+                        else:
+                            play_item.setProperty('ResumeTime', resume_time)
+                            play_item.setProperty('TotalTime', total_time)
                     else:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
 
@@ -1572,7 +1542,7 @@ class TvpPlugin(Plugin):
 
         return stream
 
-    def iter_stream_of_type(self, streams, *, begin, end, live, timeshift, mimetype, catchup):
+    def iter_stream_of_type(self, streams, *, begin, end, mimetype, live, catchup):
         settings = Settings()
 
         for stream in streams:
@@ -1658,35 +1628,47 @@ class TvpPlugin(Plugin):
             protocol = ''
 
         if 'material_niedostepny' not in stream['url']:
+            params = {}
+
             url = stream['url']
 
             if live:
                 if self.settings.timeshift_format == 1:
-                    now = datetime.utcnow()
-                    begin_t = now - timedelta(minutes=self.settings.timeshift_buffer_offset)
-                    begin_t = begin_t.strftime('%Y%m%dT%H%M%S')
-                    re_split = re.split('^.*begin=(.*?)', url)
-                    if len(re_split) >= 2:
-                        url = url.replace(re_split[2], begin_t)
-                    return Stream(url=url, proto=protocol, mime=mimetype)
-                else:
-                    begin_t = int(begin)
-                    from_ts = (datetime.fromtimestamp(begin_t) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
-                    re_split = re.split('^.*begin=(.*?)', url)
-                    if len(re_split) >= 2:
-                        url = url.replace(re_split[2], from_ts)
-                    return Stream(url=url, proto=protocol, mime=mimetype)
+                    begin_date_obj = datetime.utcnow() - timedelta(minutes=self.settings.timeshift_buffer_offset)
+                    begin_str = begin_date_obj.strftime('%Y%m%dT%H%M%S')
 
-            return Stream(url=url, proto=protocol, mime=mimetype)
+                else:
+                    begin_str = (datetime.fromtimestamp(int(begin)) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+                    end_str = (datetime.fromtimestamp(int(end)) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+
+                if begin_str:
+                    begin_tag = '?begin='
+
+                    if begin_tag in url:
+                        if begin_str:
+                            url = re.sub(r'\?begin=\d+T\d+', begin_tag + begin_str, url)
+                    else:
+                        params.update({'begin': begin_str})
+
+                    if end_str and 'end=' not in url:
+                        if begin_tag in url:
+                            params.update({'end': end_str})
+
+                    if 'live=' not in url:
+                        params.update({'live': 'true'})
+
+            req = PreparedRequest()
+            req.prepare_url(url, params)
+
+            return Stream(url=URL(req.url), proto=protocol, mime=mimetype, begin=begin_str)
 
         else:
             xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO,
                                           3000, False)
             return
 
-    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live=False, timeshift='', mimetype=None):
-        stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
-                                          mimetype=mimetype, catchup=catchup)
+    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live=None, mimetype=None):
+        stream = self.iter_stream_of_type(streams, begin=begin, end=end, mimetype=mimetype, live=live, catchup=catchup)
         return stream
 
     def exception(self):
