@@ -898,13 +898,13 @@ class TvpPlugin(Plugin):
                     date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
                     total_seconds = int((now_timedelta - date_obj).total_seconds())
 
-                    resume_time = str(total_seconds - 5)
-                    if not resume_time:
-                        resume_time = 895
+                    #resume_time = str(total_seconds - 5)
+                    #if not resume_time:
+                    #    resume_time = 895
 
-                    total_time = str(total_seconds)
-                    if not total_time:
-                        total_time = 900
+                    #total_time = str(total_seconds)
+                    #if not total_time:
+                    #    total_time = 900
 
         if stream:
             if stream.proto:
