@@ -960,7 +960,12 @@ class TvpPlugin(Plugin):
                     play_item.setProperty('inputstream.adaptive.stream_headers',
                                           'Referer: https://vod.tvp.pl/&User-Agent=' + quote(UA))
                     if KODI_VERSION >= 20:
+                        videoinfo = xbmc.InfoTagVideo(offscreen=False)
                         play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
+                        if is_live and resumetime and totaltime is not None:
+                            videoinfo.setResumePoint(float(resumetime), float(totaltime))
+                        elif is_live:
+                            videoinfo.setResumePoint(895.0, 900.0)
                     if is_live and resumetime and totaltime is not None:
                         play_item.setProperty('ResumeTime', resumetime)
                         play_item.setProperty('TotalTime', totaltime)
