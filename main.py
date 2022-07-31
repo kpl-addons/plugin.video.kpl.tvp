@@ -876,7 +876,8 @@ class TvpPlugin(Plugin):
                               params={'station_code': code}).get('data')
         if data:
             redir = self.site.jget(data['stream_url'])
-            formats = redir.get('formats')
+            formats_all = redir.get('formats')
+            formats = [s for s in formats_all if 'video/' not in s['mimeType']]
             mimetype = redir.get('mimeType')
 
             stream = self.get_stream_of_type(formats or (), begin=p_begin, end=p_end, mimetype=mimetype, live=True, catchup=False)
@@ -886,27 +887,18 @@ class TvpPlugin(Plugin):
         log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
 
-        if is_live:
-            if self.settings.timeshift_format == 1:
-                resume_time = str(self.settings.timeshift_buffer_offset * 60 - 5)
-                total_time = str(self.settings.timeshift_buffer_offset * 60)
-
-            elif self.settings.timeshift_format == 0:
-
-                if stream.begin:
-                    now_timedelta = datetime.now() - timedelta(hours=2)
-                    date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
-                    total_seconds = int((now_timedelta - date_obj).total_seconds())
-
-                    #resume_time = str(total_seconds - 5)
-                    #if not resume_time:
-                    #    resume_time = 895
-
-                    #total_time = str(total_seconds)
-                    #if not total_time:
-                    #    total_time = 900
-
         if stream:
+            if is_live:
+                if self.settings.timeshift_format == 1:
+                    resume_time = str(self.settings.timeshift_buffer_offset * 60 - 5)
+                    total_time = str(self.settings.timeshift_buffer_offset * 60)
+
+                elif self.settings.timeshift_format == 0:
+                    if stream.begin:
+                        now_timedelta = datetime.now() - timedelta(hours=2)
+                        date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
+                        total_seconds = int((now_timedelta - date_obj).total_seconds())
+
             if stream.proto:
                 is_helper = Helper(stream.proto)
                 if is_helper.check_inputstream():
@@ -1507,9 +1499,9 @@ class TvpPlugin(Plugin):
         streams = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=True)
 
         for stream in streams:
-            bitrate = stream['totalBitrate']
-            mimetype = stream['mimeType'].replace('application/', '')
-            resolution = stream['resolution']
+            bitrate = stream.get('totalBitrate')
+            mimetype = stream.get('mimeType', '').replace('application/', '')
+            resolution = stream.get('resolution')
 
             if not resolution:
                 resolution = TvpPlugin.bitrate_calculator(bitrate)
