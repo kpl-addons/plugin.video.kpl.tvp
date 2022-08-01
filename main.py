@@ -1,5 +1,5 @@
 from libka import L, Plugin, Site, subobject
-from libka import call, PathArg, entry
+from libka import call, PathArg, entry, SafeQuoteStr
 from libka.logs import log
 from libka.url import URL
 from libka.path import Path
@@ -1676,9 +1676,9 @@ class TvpPlugin(Plugin):
 
         for ch in self.channel_iter_stations():
             url = self.mkurl(self.station, code=ch.code)
-            catch_url = self.mkurl(self._iptv_catchup_helper, ch.code, '')
+            catch_url = self.mkurl(self._iptv_catchup_helper, ch.code, SafeQuoteStr('{Y}-{m}-{d}T{H}:{M}:{S}'))
             data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default" ' \
-                    f'catchup-source="{catch_url}' + '{Y}-{m}-{d}T{H}:{M}:{S}" ' + f'catchup-days="7",' + f'{ch.name}\n{url}\n'
+                    f'catchup-source="{catch_url}" catchup-days="7",' + f'{ch.name}\n{url}\n'
 
         try:
             f = xbmcvfs.File(path_m3u + file_name, 'w')
