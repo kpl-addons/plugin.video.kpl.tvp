@@ -900,6 +900,8 @@ class TvpPlugin(Plugin):
                         now_timedelta = datetime.now() - timedelta(hours=2)
                         date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
                         total_seconds = int((now_timedelta - date_obj).total_seconds())
+                        resume_time = str(total_seconds - 5)
+                        total_time = str(total_seconds)
 
             if stream.proto:
                 is_helper = Helper(stream.proto)
