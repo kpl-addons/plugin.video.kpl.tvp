@@ -863,10 +863,10 @@ class TvpPlugin(Plugin):
         date = datetime.today()
         program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index',
                                  params={'station_code': code, 'date': date}).get('data')
-
         if program:
             timestamp = int(datetime.now().timestamp())
             p_begin = None
+            p_end = None
             for p in program:
                 if p['date_start'] / 1000 <= timestamp <= p['date_end'] / 1000:
                     p_begin = p['date_start'] / 1000
