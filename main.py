@@ -892,6 +892,7 @@ class TvpPlugin(Plugin):
         if stream:
             if is_live:
                 if self.settings.timeshift_format == 1:
+                    self.settings.timeshift_buffer_offset = max(self.settings.timeshift_buffer_offset, 5)
                     resume_time = str(self.settings.timeshift_buffer_offset * 60 - 5)
                     total_time = str(self.settings.timeshift_buffer_offset * 60)
 
