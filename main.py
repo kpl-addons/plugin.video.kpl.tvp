@@ -1674,9 +1674,9 @@ class TvpPlugin(Plugin):
 
         for ch in self.channel_iter_stations():
             url = self.mkurl(self.station, code=ch.code)
-            catch_url = self.mkurl(self._iptv_catchup_helper, ch.code, '{Y}-{m}-{d}T{H}:{M}:{S}')
+            catch_url = self.mkurl(self._iptv_catchup_helper, ch.code, '')
             data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default" ' \
-                    f'catchup-source="{catch_url}" catchup-days="7",' + f'{ch.name}\n{url}\n'
+                    f'catchup-source="{catch_url}' + '{Y}-{m}-{d}T{H}:{M}:{S}" ' + f'catchup-days="7",' + f'{ch.name}\n{url}\n'
 
         try:
             f = xbmcvfs.File(path_m3u + file_name, 'w')
