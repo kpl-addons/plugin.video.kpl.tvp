@@ -871,6 +871,9 @@ class TvpPlugin(Plugin):
                 if p['date_start'] / 1000 <= timestamp <= p['date_end'] / 1000:
                     p_begin = p['date_start'] / 1000
                     p_end = p['date_end'] / 1000
+                else:
+                    p_begin = (datetime.now() - timedelta(minutes=30)).timestamp()
+                    p_end = (datetime.now() + timedelta(minutes=180)).timestamp()
 
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
