@@ -865,15 +865,14 @@ class TvpPlugin(Plugin):
                                  params={'station_code': code, 'date': date}).get('data')
         if program:
             timestamp = int(datetime.now().timestamp())
-            p_begin = None
-            p_end = None
+            # jeśli brakuje epg dla programu -- ustawia "domyślne" wartości dla p_begin i p_end = -30min / +180min
+            p_begin = (datetime.now() - timedelta(minutes=30)).timestamp()
+            p_end = (datetime.now() + timedelta(minutes=180)).timestamp()
+            # w innym wypadku bierze dane z epg
             for p in program:
                 if p['date_start'] / 1000 <= timestamp <= p['date_end'] / 1000:
                     p_begin = p['date_start'] / 1000
                     p_end = p['date_end'] / 1000
-                else:
-                    p_begin = (datetime.now() - timedelta(minutes=30)).timestamp()
-                    p_end = (datetime.now() + timedelta(minutes=180)).timestamp()
 
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
