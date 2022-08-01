@@ -10,7 +10,7 @@ from libka.calendar import str2date
 from libka.search import search, Search
 from libka.settings import Settings
 from pdom import select as dom_select
-from urllib.parse import urlencode, urlparse, parse_qs, quote
+from urllib.parse import quote
 import json
 from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
@@ -23,6 +23,7 @@ import xbmcgui  # dialogs
 import xbmcplugin  # setResolvedUrl
 import xbmcvfs  # for file in m3u generator
 import requests
+from requests.models import PreparedRequest
 
 try:
     from ttml2ssa import Ttml2SsaAddon
@@ -42,18 +43,6 @@ CurrentAndFuture = object()
 
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
 UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
-
-class proxydt(datetime):
-    @staticmethod
-    def strptime(date_string, format):
-        import time
-        try:
-            res = datetime.strptime(date_string, format)
-        except:
-            res = datetime(*(time.strptime(date_string, format)[0:6]))
-        return res
-
-proxydt = proxydt
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -130,7 +119,7 @@ def image_link(image):
 
 
 StreamType = namedtuple('StreamType', 'proto mime')
-Stream = namedtuple('Stream', 'url proto mime')
+Stream = namedtuple('Stream', 'url proto mime begin')
 EuVideo = namedtuple('EuVideo', 'width height rate url')
 
 ChannelInfo = namedtuple('ChannelInfo', 'code name image id epg', defaults=(None,))
@@ -227,7 +216,7 @@ class TvpSite(Site):
     def __init__(self, base='https://www.api.v3.tvp.pl/', *args, count=None, verify_ssl=False, **kwargs):
         super().__init__(base, *args, verify_ssl=verify_ssl, **kwargs)
         self.count = count
-        self.dT = timedelta(minutes=5)  # time epsilon (extrnd filter time range)
+        self.dT = timedelta(minutes=5)  # time epsilon (extend filter time range)
 
     def listing(self, parent_id, *, dump='json', direct=True, **kwargs):
         count = kwargs.pop('count', self.count)
@@ -350,7 +339,7 @@ class TvpPlugin(Plugin):
             Menu(call='replay_list'),
         ]),
         MenuItems(id=1785454, type='directory_series', order={2: 'programy', 1: 'seriale', -1: 'teatr*'}),
-        # Menu(title='Rekonstrucja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
+        # Menu(title='Rekonstrukcja cyfrowa', id=35470692),  --- jest już powyższym w MenuItems(1785454)
         Menu(title=L(30119, 'Sport'), items=[
             Menu(title=L(30117, 'Broadcast'), call=call('transmissions', 13010508)),
             Menu(title=L(30114, 'Rebroadcast'), id=48583081),
@@ -490,8 +479,8 @@ class TvpPlugin(Plugin):
 
     def listing(self, id: PathArg[int], page=None, vid_type=None):
         """Use api.v3.tvp.pl JSON listing."""
-        per_page = self.settings.per_page_limit  # liczba video na stonę
-        # PAGE = None  # wszystko na raz na stronie
+        per_page = self.settings.per_page_limit  # liczba video na stronę
+        # PAGE = None # wszystko na raz na stronie
 
         # TODO:  determine `view`
         with self.site.concurrent() as con:
@@ -534,7 +523,7 @@ class TvpPlugin(Plugin):
                             kdir.menu(f'Strona {n + 1}', call(self.listing, id=id, page=n + 1))
                     return
 
-            # Analiza szcegółów, w tym dokładnych opisów i danych video
+            # Analiza szczegółów, w tym dokładnych opisów i danych video
             if self.settings.api_details:
                 has_extra = False
                 with self.site.concurrent() as con:
@@ -567,13 +556,15 @@ class TvpPlugin(Plugin):
                             item['VIDEOS'] = [it['asset_id'] for it in con.a[iid].get('items', ())
                                               if it.get('object_type') == 'video' and it.get('playable')]
 
-            # Zwykłe katalogi (albo odcinki bezpośrenio z oszukanego).
+            # Zwykłe katalogi (albo odcinki bezpośrednio z szukanego).
             if vid_type == 'website':
                 with self.site.concurrent() as con:
                     con.a.data.listing(id)
                     con.a.details.details(id)
                 data = con.a.data
-                a_id = data['items'][0]['asset_id']
+                items = [item for item in data['items'] if
+                         item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
+                a_id = items[0]['asset_id']
                 items = self.site.listing(a_id, count=per_page, page=page).get('items')
                 for item in items:
                     self._item(kdir, item)
@@ -817,7 +808,8 @@ class TvpPlugin(Plugin):
 
     @entry(path='/iptv_catchup/<code>/<target_date>')
     def _iptv_catchup_helper(self, code, target_date):
-        date_obj = proxydt.strptime(target_date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
+        log(f' TARGET _ DATE : {target_date}')
+        date_obj = datetime.strptime(target_date, '%Y-%m-%dT%H:%M:%S') + timedelta(minutes=5)
         timestamp = int((datetime.timestamp(date_obj) * 1000))
         epg = self.site.station_epg(code, target_date)
 
@@ -867,74 +859,72 @@ class TvpPlugin(Plugin):
             stream = self.get_stream_of_type(streams, mimetype=mimetype, catchup=False)
             self._play(stream)
 
-    def station(self, code: PathArg, pvr=None):
+    def station(self, code: PathArg, pvr=''):
         date = datetime.today()
         program = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/program-tv/index',
                                  params={'station_code': code, 'date': date}).get('data')
-
         if program:
-            now = int(datetime.now().timestamp() * 1000)
-            begin_ts, end_ts = [(item['date_start'], item['date_end']) for item in program if
-                                item['date_start'] <= now <= item['date_end']][0]
-
-            begin_date = datetime.fromtimestamp(int(begin_ts) // 1000) - timedelta(hours=2)
-            end_date = datetime.fromtimestamp(int(end_ts) // 1000) - timedelta(hours=2)
-
-            begin_date = begin_date.strftime('%Y%m%dT%H%M%S')
-            end_date = end_date.strftime('%Y%m%dT%H%M%S')
-
-            begin_tag = begin_date
-            end_tag = end_date
-        else:
-            begin_tag = None
-            end_tag = None
+            timestamp = int(datetime.now().timestamp())
+            # jeśli brakuje epg dla programu -- ustawia "domyślne" wartości dla p_begin i p_end = -30min / +180min
+            p_begin = (datetime.now() - timedelta(minutes=30)).timestamp()
+            p_end = (datetime.now() + timedelta(minutes=180)).timestamp()
+            # w innym wypadku bierze dane z epg
+            for p in program:
+                if p['date_start'] / 1000 <= timestamp <= p['date_end'] / 1000:
+                    p_begin = p['date_start'] / 1000
+                    p_end = p['date_end'] / 1000
 
         data = self.site.jget('https://tvpstream.tvp.pl/api/tvp-stream/stream/data',
                               params={'station_code': code}).get('data')
         if data:
             redir = self.site.jget(data['stream_url'])
-            formats = redir.get('formats')
-
-            live = redir.get('live')
-            if live:
-                live_tag = 'true'
-            else:
-                live_tag = 'false'
-
-            timeshift = redir.get('timeShift')
-            if timeshift:
-                timeshift_tag = 'true'
-            else:
-                timeshift_tag = 'false'
-
+            formats_all = redir.get('formats')
+            formats = [s for s in formats_all if 'video/' not in s['mimeType']]
             mimetype = redir.get('mimeType')
 
-            stream = self.get_stream_of_type(formats or (), begin=begin_tag, end=end_tag, live=live_tag,
-                                             timeshift=timeshift_tag, mimetype=mimetype, catchup=False)
-            self._play(stream)
+            stream = self.get_stream_of_type(formats or (), begin=p_begin, end=p_end, mimetype=mimetype, live=True, catchup=False)
+            self._play(stream, is_live=True)
 
-    def _play(self, stream):
+    def _play(self, stream, is_live=None, resume_time=None, total_time=None):
         log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
+
         if stream:
+            if is_live:
+                if self.settings.timeshift_format == 1:
+                    resume_time = str(self.settings.timeshift_buffer_offset * 60 - 5)
+                    total_time = str(self.settings.timeshift_buffer_offset * 60)
+
+                elif self.settings.timeshift_format == 0:
+                    if stream.begin:
+                        now_timedelta = datetime.now() - timedelta(hours=2)
+                        date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
+                        total_seconds = int((now_timedelta - date_obj).total_seconds())
+
             if stream.proto:
                 is_helper = Helper(stream.proto)
                 if is_helper.check_inputstream():
+                    video_info = xbmc.InfoTagVideo(offscreen=False)
                     play_item = xbmcgui.ListItem(path=stream.url)
-                    if stream.mime is not None:
+                    if stream.mime:
                         play_item.setMimeType(stream.mime)
                     play_item.setContentLookup(False)
                     play_item.setProperty('inputstream', is_helper.inputstream_addon)
                     play_item.setProperty("IsPlayable", "true")
+                    play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
                     play_item.setProperty('inputstream.adaptive.manifest_type', stream.proto)
-                    play_item.setProperty('inputstream.adaptive.license_type', 'com.widevine.alpha')
                     play_item.setProperty('inputstream.adaptive.manifest_update_parameter', 'full')
                     play_item.setProperty('inputstream.adaptive.stream_headers',
                                           'Referer: https://vod.tvp.pl/&User-Agent=' + quote(UA))
-                    if KODI_VERSION >= 20:
-                        play_item.setProperty('inputstream.adaptive.stream_selection_type', 'manual-osd')
-                    if 'live=true' not in stream.url:
+                    if is_live:
+                        if KODI_VERSION >= 20:
+                            video_info.setResumePoint(float(resume_time), float(total_time))
+                        else:
+                            play_item.setProperty('ResumeTime', resume_time)
+                            play_item.setProperty('TotalTime', total_time)
+                    else:
                         play_item.setProperty('inputstream.adaptive.play_timeshift_buffer', 'true')
+
                     xbmcplugin.setResolvedUrl(handle=self.handle, succeeded=True, listitem=play_item)
             else:
                 play_item = xbmcgui.ListItem(path=stream.url)
@@ -963,7 +953,7 @@ class TvpPlugin(Plugin):
         return end
 
     def transmissions(self, id: PathArg, date=None):
-        """Live transmistions (sport: 13010508, parlament: 4422078)."""
+        """Live transmission (sport: 13010508, parlament: 4422078)."""
         now = datetime.utcnow()
         local_now = now + self.tz_offset
         local_prev = datetime.fromtimestamp(86400)
@@ -1101,7 +1091,7 @@ class TvpPlugin(Plugin):
                 menu.append((f'!!! {iid}', self.exception))
         if self.settings.debugging:
             menu.append((f'ID {iid}', self.refresh))
-            menu.append((f'Playlable {playable}', self.refresh))
+            menu.append((f'Playable {playable}', self.refresh))
             for pid in item.get('parents', ()):
                 # menu.append((f'Parent {pid}', call(self.refresh, call(self.listing, id=pid))))
                 menu.append((f'Parent {pid}', call(self.listing, id=pid)))
@@ -1315,10 +1305,11 @@ class TvpPlugin(Plugin):
                                         self.play_failed()
         else:  # free
             log(f'free video: {id}', title='TVP')
-            stream = Stream(stream_url, '', '')
+            stream = Stream(stream_url, '', '', '')
             if 'material_niedostepny' not in stream.url:
                 if 'formats' in resp:
-                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'], catchup=False)
+                    stream = self.get_stream_of_type(resp['formats'], mimetype=resp['mimeType'], catchup=False,
+                                                     live=False)
                     if stream_url:
                         if (stream.mime == 'application/x-mpegurl' and 'end' in stream.url.query
                                 and '.m3u8' in str(stream.url) and not self.site.head(stream.url).ok):
@@ -1476,7 +1467,7 @@ class TvpPlugin(Plugin):
                                      'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
                 item = json.loads(unescape(jsdata))
                 # log(f'VS: {item!r}')
-                sid = item['myListId']  # seris link
+                sid = item['myListId']  # series link
                 title = item['title']
                 episode = item.get('episodeCount')
                 if episode:
@@ -1510,9 +1501,9 @@ class TvpPlugin(Plugin):
         streams = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=True)
 
         for stream in streams:
-            bitrate = stream['totalBitrate']
-            mimetype = stream['mimeType'].replace('application/', '')
-            resolution = stream['resolution']
+            bitrate = stream.get('totalBitrate')
+            mimetype = stream.get('mimeType', '').replace('application/', '')
+            resolution = stream.get('resolution')
 
             if not resolution:
                 resolution = TvpPlugin.bitrate_calculator(bitrate)
@@ -1531,7 +1522,7 @@ class TvpPlugin(Plugin):
 
         return stream
 
-    def iter_stream_of_type(self, streams, *, begin, end, live, timeshift, mimetype, catchup):
+    def iter_stream_of_type(self, streams, *, begin, end, mimetype, live, catchup):
         settings = Settings()
 
         for stream in streams:
@@ -1577,7 +1568,7 @@ class TvpPlugin(Plugin):
                     return
 
             elif settings.bitrate_selector >= 0:
-                if settings.bitrate_selector == 0: # defualt
+                if settings.bitrate_selector == 0:  # default
                     stream = [d for d in streams if mimetype == d['mimeType']][-1]
 
                 else:
@@ -1585,13 +1576,13 @@ class TvpPlugin(Plugin):
                     if settings.bitrate_selector == 2:  # high
                         max_bitrate = possible_bitrates[:11][-1]
 
-                    elif settings.bitrate_selector == 3: # average
+                    elif settings.bitrate_selector == 3:  # average
                         max_bitrate = possible_bitrates[:10][-1]
 
-                    elif settings.bitrate_selector == 4: # low
+                    elif settings.bitrate_selector == 4:  # low
                         max_bitrate = possible_bitrates[:6][-1]
 
-                    elif settings.bitrate_selector == 5: # very low
+                    elif settings.bitrate_selector == 5:  # very low
                         max_bitrate = possible_bitrates[:3][-1]
 
                     else:
@@ -1601,7 +1592,7 @@ class TvpPlugin(Plugin):
                     stream = bandwidths[0] if bandwidths else None
 
         if not stream:
-            stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0] # maximum
+            stream = sorted(streams, key=lambda d: (-int(d['totalBitrate'])), reverse=False)[0]  # maximum
 
         mimetype = stream['mimeType']
 
@@ -1617,43 +1608,50 @@ class TvpPlugin(Plugin):
             protocol = ''
 
         if 'material_niedostepny' not in stream['url']:
-            url = stream['url']
-
             params = {}
-            if begin:
-                tag = '?begin='
-                if 'begin=' in url:
-                    begin = re.sub(r'^\?begin=\d+T\d+', tag + begin, url)
 
-            if end and 'end=' not in url:
-                if 'begin=' in url:
-                    params.update({'end': end})
+            url = stream['url']
+            begin_str = None
+            end_str = None
 
-            if live and 'live=' not in url:
-                params.update({'live': live})
+            if live:
+                if self.settings.timeshift_format == 1:
+                    max_offset = min(self.settings.timeshift_buffer_offset, 2160)
+                    begin_date_obj = datetime.utcnow() - timedelta(minutes=max_offset)
+                    begin_str = begin_date_obj.strftime('%Y%m%dT%H%M%S')
 
-            if timeshift and 'timeshift=' not in url:
-                params.update({'timeshift': timeshift})
+                else:
+                    begin_str = (datetime.fromtimestamp(int(begin)) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+                    end_str = (datetime.fromtimestamp(int(end)) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
 
-            parsed_url = urlparse(url)
-            parsed_query = parse_qs(parsed_url.query)
-            if parsed_query:
-                start_tag = '&'
-            else:
-                start_tag = '?'
+                if begin_str:
+                    begin_tag = '?begin='
 
-            url_ = URL(url + start_tag + urlencode(params))
+                    if begin_tag in url:
+                        if begin_str:
+                            url = re.sub(r'\?begin=\d+T\d+', begin_tag + begin_str, url)
+                    else:
+                        params.update({'begin': begin_str})
 
-            return Stream(url=url_, proto=protocol, mime=mimetype)
+                    if end_str and 'end=' not in url:
+                        if begin_tag in url:
+                            params.update({'end': end_str})
+
+                    if 'live=' not in url:
+                        params.update({'live': 'true'})
+
+            req = PreparedRequest()
+            req.prepare_url(url, params)
+
+            return Stream(url=URL(req.url), proto=protocol, mime=mimetype, begin=begin_str)
 
         else:
             xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'), xbmcgui.NOTIFICATION_INFO,
                                           3000, False)
             return
 
-    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live='', timeshift='', mimetype=None):
-        stream = self.iter_stream_of_type(streams, begin=begin, end=end, live=live, timeshift=timeshift,
-                                          mimetype=mimetype, catchup=catchup)
+    def get_stream_of_type(self, streams, catchup, *, begin=None, end=None, live=None, mimetype=None):
+        stream = self.iter_stream_of_type(streams, begin=begin, end=end, mimetype=mimetype, live=live, catchup=catchup)
         return stream
 
     def exception(self):
@@ -1675,7 +1673,9 @@ class TvpPlugin(Plugin):
 
         for ch in self.channel_iter_stations():
             url = self.mkurl(self.station, code=ch.code)
-            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default"' 'catchup-source="plugin://plugin.video.kpl.tvp/iptv_catchup/' + ch.code + '/{Y}-{m}-{d}T{H}:{M}:{S}" catchup-days="7",' + f'{ch.name}\n{url}\n'
+            catch_url = self.mkurl(self._iptv_catchup_helper, ch.code, '')
+            data += f'#EXTINF:0 tvg-id="{ch.name}" tvg-logo="{ch.image}" catchup="default" ' \
+                    f'catchup-source="{catch_url}' + '{Y}-{m}-{d}T{H}:{M}:{S}" ' + f'catchup-days="7",' + f'{ch.name}\n{url}\n'
 
         try:
             f = xbmcvfs.File(path_m3u + file_name, 'w')
