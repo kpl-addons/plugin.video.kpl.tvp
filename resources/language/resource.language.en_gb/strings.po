@@ -329,5 +329,5 @@ msgid "Custom"
 msgstr ""
 
 msgctxt "#30180"
-msgid "Time offset in minutes"
+msgid "Time offset in minutes (5-2160)"
 msgstr ""
