@@ -889,6 +889,12 @@ class TvpPlugin(Plugin):
         log(f'PLAY {stream!r}')
         from inputstreamhelper import Helper
 
+        url = stream.url
+        channel = re.split('^.*bpk-tv/(.*?)/.*', stream.url)[1]
+        blackout_var = channel
+
+        manifest = f'http://127.0.0.1:6969/manifest?url={url}&channel={channel}&blackout={blackout_var}'
+
         if stream:
             if is_live:
                 if self.settings.timeshift_format == 1:
@@ -908,7 +914,7 @@ class TvpPlugin(Plugin):
                 is_helper = Helper(stream.proto)
                 if is_helper.check_inputstream():
                     video_info = xbmc.InfoTagVideo(offscreen=False)
-                    play_item = xbmcgui.ListItem(path=stream.url)
+                    play_item = xbmcgui.ListItem(path=manifest)
                     if stream.mime:
                         play_item.setMimeType(stream.mime)
                     play_item.setContentLookup(False)
