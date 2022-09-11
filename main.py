@@ -1256,7 +1256,7 @@ class TvpPlugin(Plugin):
                     'content-length': '0',
                     'content-type': 'application/x-www-form-urlencoded',
                     'user-agent': 'okhttp/3.8.1',
-                    'access-token': token
+                    'Access-Token': token
                 }
                 resp = self.site.jpost(f'https://apivod.tvp.pl/tv/v2/video/{id}/default/default?device=android',
                                        headers=hea, verify=False)
