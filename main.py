@@ -16,6 +16,7 @@ from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
 from html import unescape
 from datetime import datetime, timedelta
+import pytz
 import re
 from enum import IntEnum
 import xbmc  # for getCondVisibility and getInfoLabel
@@ -96,6 +97,12 @@ remove_tags.replace = {
     'em': 'I',
 }
 
+def timezone_offset(timezone):
+    naive = datetime.now()
+    tz = pytz.timezone(timezone)
+    aware = tz.localize(naive)
+
+    return int(str(aware.utcoffset())[:1])
 
 def linkid(url):
     """Returns ID from TVP link."""
@@ -898,7 +905,8 @@ class TvpPlugin(Plugin):
 
                 elif self.settings.timeshift_format == 0:
                     if stream.begin:
-                        now_timedelta = datetime.now() - timedelta(hours=2)
+                        offset = timezone_offset("Europe/Warsaw")
+                        now_timedelta = datetime.now() - timedelta(hours=offset)
                         date_obj = datetime.strptime(stream.begin, '%Y%m%dT%H%M%S')
                         total_seconds = int((now_timedelta - date_obj).total_seconds())
                         resume_time = str(total_seconds - 5)
@@ -1624,8 +1632,9 @@ class TvpPlugin(Plugin):
                     begin_str = begin_date_obj.strftime('%Y%m%dT%H%M%S')
 
                 else:
-                    begin_str = (datetime.fromtimestamp(int(begin)) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
-                    end_str = (datetime.fromtimestamp(int(end)) - timedelta(hours=2)).strftime('%Y%m%dT%H%M%S')
+                    offset = timezone_offset("Europe/Warsaw")
+                    begin_str = (datetime.fromtimestamp(int(begin)) - timedelta(hours=offset)).strftime('%Y%m%dT%H%M%S')
+                    end_str = (datetime.fromtimestamp(int(end)) - timedelta(hours=offset)).strftime('%Y%m%dT%H%M%S')
 
                 if begin_str:
                     begin_tag = '?begin='

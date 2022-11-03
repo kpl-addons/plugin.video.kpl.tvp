@@ -5,6 +5,7 @@
 		<import addon="script.module.libka"/>
 		<import addon="script.module.inputstreamhelper" />
 		<import addon="script.module.ttml2ssa" optional="true"/>
+		<import addon="script.module.pytz"/>
 		<import addon="script.module.pil"/>
 	</requires>
 	<extension point="xbmc.python.pluginsource" library="main.py">
