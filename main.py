@@ -324,7 +324,35 @@ class TvpSite(Site):
                          params={'dump': dump, 'direct': direct, 'count': count, 'parent_id': parent_id,
                                  'nocount': nocount, 'copy': copy, 'type': type, 'filter': filterx, 'order': order,
                                  **kwargs})
+        
+    def trailer(self, id: PathArg[id]):
+        data = self.jget(f'https://vod.tvp.pl/api/products/{id}/videos/playlist', params={
+                'lang': 'pl',
+                'platform': 'BROWSER',
+                'videoType': 'TRAILER'
+        })
+        return data
 
+    def vod_search_data(self, query, s_type):
+        if s_type == 'movie':
+            return self.jget(f'https://vod.tvp.pl/api/products/vods/search/VOD', params={
+                'lang': 'pl',
+                'platform': 'BROWSER',
+                'keyword': query
+            })
+        if s_type == 'serial':
+            return self.jget(f'https://vod.tvp.pl/api/products/vods/search/SERIAL', params={
+                'lang': 'pl',
+                'platform': 'BROWSER',
+                'keyword': query
+            })
+        if s_type == 'episode':
+            return self.jget(f'https://vod.tvp.pl/api/products/vods/search/EPISODE', params={
+                'lang': 'pl',
+                'platform': 'BROWSER',
+                'keyword': query
+            })
+        
 
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
@@ -1192,10 +1220,13 @@ class TvpPlugin(Plugin):
         item = xbmcgui.ListItem()
         xbmcplugin.setResolvedUrl(self.handle, False, listitem=item)
 
-    def video(self, id: PathArg[int]):
+    def video(self, id: PathArg[int], vod=None, paid=None):
         """Play video – PlayTVPInfo by mtr81."""
         # TODO: cleanup
-        data = self.site.details(id)
+        if vod:
+            data = self.site.jget(f'https://vod.tvp.pl/api/products/{id}/videos/playlist?platform=BROWSER&videoType=MOVIE')
+        else:
+            data = self.site.details(id)
         log(f"Video: {id}, type={data.get('type')}, live_video_id={data.get('live_video_id')},"
             f" video_id={data.get('video_id')}", title='TVP')
         # !!! if data.get('type') == 'virtual_channel' and 'live_video_id' in data:
@@ -1232,7 +1263,21 @@ class TvpPlugin(Plugin):
         url = f'https://www.tvp.pl/shared/cdn/tokenizer_v2.php?object_id={id}'
         resp = self.site.jget(url)
         stream_url = ''
-        if resp['payment_type'] != 0 or resp['status'] == 'NOT_FOUND_FOR_PLATFORM':  # ABO
+        if vod:
+            if paid:
+                xbmcgui.Dialog().notification('[B]TVP[/B]', L(30158, '[ABO zone] Information'),
+                                                  xbmcgui.NOTIFICATION_INFO, 8000, False)
+                self.play_failed()
+            else:
+                if data.get('code') == 'ITEM_NOT_PAID':
+                    xbmcgui.Dialog().notification('[B]TVP[/B]', L(30158, '[ABO zone] Information'),
+                                                  xbmcgui.NOTIFICATION_INFO, 8000, False)
+                    self.play_failed()
+                else:
+                    stream_url = data['sources']['HLS'][0]['src']
+                    stream = Stream(stream_url, None, None, None)
+                    self._play(stream)
+        elif resp['payment_type'] != 0 or resp['status'] == 'NOT_FOUND_FOR_PLATFORM':  # ABO
             hea = {
                 'accept-encoding': 'gzip',
                 'authorization': 'Basic dGVzdHZvZDp0ZXN0eXZvZDI5Mng=',
@@ -1338,6 +1383,13 @@ class TvpPlugin(Plugin):
                 xbmcgui.Dialog().notification('[B]TVP[/B]', L(30157, 'Stream not available'),
                                               xbmcgui.NOTIFICATION_INFO, 3000, False)
                 self.play_failed()
+
+    def trailer(self, id: PathArg[int]):
+        data = self.site.trailer(id)
+        stream_url = data['sources']['MP4'][0]['src']
+        stream = Stream(stream_url, None, None, None)
+        self._play(stream)
+        
 
     def subt_gen_abo(self, d):
         """Tablica z linkami do plików z napisami (format .ssa)."""
@@ -1470,32 +1522,66 @@ class TvpPlugin(Plugin):
                     self._item(kdir, item)
 
     def vod_search_folder(self, query):
-        sep = True
         with self.directory() as kdir:
-            page = self.site.txtget('https://vod.tvp.pl/szukaj', params={'query': query})
-            # log(f'VS: page.len={len(page)!r}')
-            for jsdata in dom_select(page,
-                                     'div.serachContent div.item.js-hover(data-hover)'):  # "serachContent" (sic!)
-                item = json.loads(unescape(jsdata))
-                # log(f'VS: {item!r}')
-                sid = item['myListId']  # series link
-                title = item['title']
-                episode = item.get('episodeCount')
-                if episode:
-                    title = f'{title}, {episode}'
-                    if sep:
-                        sep = False
-                        kdir.separator('Odcinki')
-                    sid = item.get('episodeLink', sid).rpartition(',')[2]
-                    kdir.play(title, call(self.video, sid), image=item['image'], descr=item.get('description'))
-                else:
-                    kdir.menu(title, call(self.listing, sid), image=item['image'], descr=item.get('description'))
+            kdir.menu('Filmy', call(self.vod_search_data, query, 'movie'))
+            kdir.menu('Seriale', call(self.vod_search_data, query, 'serial'))
+            kdir.menu('Odcinki', call(self.vod_search_data, query, 'episode'))
+
+    def vod_search_data(self, query, s_type):
+        with self.directory() as kdir:
+            if s_type == 'movie':
+                data = self.site.vod_search_data(query, 'movie')
+                for item in data['items']:
+                    kdir.menu(item['title'], call(self.vod_results, item['id']), descr=item.get('lead'))
+            if s_type == 'serial':
+                data = self.site.vod_search_data(query, 'serial')
+                for item in data['items']:
+                    kdir.menu(item['title'], call(self.vod_serial_results, item['id']), descr=item.get('lead'))
+            if s_type == 'episode':
+                data = self.site.vod_search_data(query, 'episode')
+                for item in data['items']:
+                    kdir.menu(item['title'], call(self.vod_results, item['id']), descr=item.get('lead'))
+
+    def vod_results(self, id: PathArg[int]):
+        with self.directory() as kdir:
+            page = self.site.jget(f'https://vod.tvp.pl/api/products/vods/{id}', params={
+                'lang': 'pl',
+                'platform': 'BROWSER'
+            })
+            if page.get('paymentSchedules'):
+                kdir.play(page['title'] + ' [PŁATNE]', call(self.video, page['id'], vod=True, paid=True), descr=page.get('lead'))
+            else:
+                info = {
+                    'title': page['title'],
+                    'plot': page.get('lead')
+                }
+                kdir.play(page['title'], call(self.video, page['id'], vod=True), info=info, descr=page.get('lead'))
+            if page.get('trailer'):
+                kdir.play(page['title'] + ' [Zwiastun]', call(self.trailer, page['id']), descr=page.get('lead'))
+    
+    def vod_serial_results(self, id: PathArg[int]):
+        with self.directory() as kdir:
+            page = self.site.jget(f'https://vod.tvp.pl/api/products/vods/serials/{id}/seasons', params={
+                'lang': 'pl',
+                'platform': 'BROWSER'
+            })
+            for item in page:
+                kdir.menu(item['title'], call(self.seasons, id, item['id']))
+                
+    def seasons(self, id: PathArg[int], s_id: PathArg[int]):
+        with self.directory() as kdir:
+            page = self.site.jget(f'https://vod.tvp.pl/api/products/vods/serials/{id}/seasons/{s_id}/episodes', params={
+                'lang': 'pl',
+                'platform': 'BROWSER'
+            })
+            for item in page:
+                kdir.play(item['title'], call(self.video, item['id'], vod=True))
 
     def bitrate_calculator(bitrate):
         bitrate_ = int(bitrate / 10000)
 
         possible_bitrates = [32, 40, 48, 56, 64, 112, 128, 160, 256, 512, 640, 10000]
-        possible_resolutions = ['128×96', '160×120', '256×144', '320×180', '400x225', '480×240', '640×360', '720x400',
+        possible_resolutions = ['128x96', '160x120', '256x144', '320x180', '400x225', '480x240', '640x360', '720x400',
                                 '800x480', '960x540', '1280x720', '1920x1080']
 
         resolutions = [possible_bitrates.index(b) for b in possible_bitrates if bitrate_ < b]
