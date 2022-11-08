@@ -9,7 +9,7 @@ from libka.lang import day_label, text as lang_text
 from libka.calendar import str2date
 from libka.search import search, Search
 from libka.settings import Settings
-from pdom import select as dom_select
+# from pdom import select as dom_select
 from urllib.parse import quote
 import json
 from collections.abc import Mapping
@@ -43,7 +43,9 @@ Future = object()
 CurrentAndFuture = object()
 
 KODI_VERSION = int(xbmc.getInfoLabel('System.BuildVersion')[:2])
-UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71'
+UA = ('Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko)'
+      ' Chrome/103.0.5060.134 Safari/537.36 Edg/103.0.1264.71')
+
 
 class TransmissionLayout(IntEnum):
     DayFolder = 0
@@ -97,12 +99,14 @@ remove_tags.replace = {
     'em': 'I',
 }
 
+
 def timezone_offset(timezone):
     naive = datetime.now()
     tz = pytz.timezone(timezone)
     aware = tz.localize(naive)
 
     return int(str(aware.utcoffset())[:1])
+
 
 def linkid(url):
     """Returns ID from TVP link."""
@@ -324,7 +328,7 @@ class TvpSite(Site):
                          params={'dump': dump, 'direct': direct, 'count': count, 'parent_id': parent_id,
                                  'nocount': nocount, 'copy': copy, 'type': type, 'filter': filterx, 'order': order,
                                  **kwargs})
-        
+
     def trailer(self, id: PathArg[id]):
         data = self.jget(f'https://vod.tvp.pl/api/products/{id}/videos/playlist', params={
                 'lang': 'pl',
@@ -335,24 +339,24 @@ class TvpSite(Site):
 
     def vod_search_data(self, query, s_type):
         if s_type == 'movie':
-            return self.jget(f'https://vod.tvp.pl/api/products/vods/search/VOD', params={
+            return self.jget('https://vod.tvp.pl/api/products/vods/search/VOD', params={
                 'lang': 'pl',
                 'platform': 'BROWSER',
                 'keyword': query
             })
         if s_type == 'serial':
-            return self.jget(f'https://vod.tvp.pl/api/products/vods/search/SERIAL', params={
+            return self.jget('https://vod.tvp.pl/api/products/vods/search/SERIAL', params={
                 'lang': 'pl',
                 'platform': 'BROWSER',
                 'keyword': query
             })
         if s_type == 'episode':
-            return self.jget(f'https://vod.tvp.pl/api/products/vods/search/EPISODE', params={
+            return self.jget('https://vod.tvp.pl/api/products/vods/search/EPISODE', params={
                 'lang': 'pl',
                 'platform': 'BROWSER',
                 'keyword': query
             })
-        
+
 
 class TvpPlugin(Plugin):
     """tvp.pl plugin."""
@@ -435,7 +439,8 @@ class TvpPlugin(Plugin):
     }
     vod_search = subobject()
 
-    epg_url = 'http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25'
+    # epg_url = ('http://www.tvp.pl/shared/programtv-listing.php?station_code={code}&count=100&filter=[]&'
+    #            'template=json%2Fprogram_tv%2Fpartial%2Foccurrences-full.html&today_from_midnight=1&date=2022-04-25')
 
     def __init__(self):
         super().__init__()
@@ -597,8 +602,9 @@ class TvpPlugin(Plugin):
                     con.a.data.listing(id)
                     con.a.details.details(id)
                 data = con.a.data
-                items = [item for item in data['items'] if
-                         item.get('object_type') in self.TYPES_ALLOWED and item.get('web_name') not in self.NOT_ALLOWED]
+                items = [item for item in data['items']
+                         if (item.get('object_type') in self.TYPES_ALLOWED
+                             and item.get('web_name') not in self.NOT_ALLOWED)]
                 a_id = items[0]['asset_id']
                 items = self.site.listing(a_id, count=per_page, page=page).get('items')
                 for item in items:
@@ -917,7 +923,8 @@ class TvpPlugin(Plugin):
             formats = [s for s in formats_all if 'video/' not in s['mimeType']]
             mimetype = redir.get('mimeType')
 
-            stream = self.get_stream_of_type(formats or (), begin=p_begin, end=p_end, mimetype=mimetype, live=True, catchup=False)
+            stream = self.get_stream_of_type(formats or (), begin=p_begin, end=p_end, mimetype=mimetype,
+                                             live=True, catchup=False)
             self._play(stream, is_live=True)
 
     def _play(self, stream, is_live=None, resume_time=None, total_time=None):
@@ -1224,7 +1231,8 @@ class TvpPlugin(Plugin):
         """Play video – PlayTVPInfo by mtr81."""
         # TODO: cleanup
         if vod:
-            data = self.site.jget(f'https://vod.tvp.pl/api/products/{id}/videos/playlist?platform=BROWSER&videoType=MOVIE')
+            data = self.site.jget(f'https://vod.tvp.pl/api/products/{id}/videos/playlist'
+                                  '?platform=BROWSER&videoType=MOVIE')
         else:
             data = self.site.details(id)
         log(f"Video: {id}, type={data.get('type')}, live_video_id={data.get('live_video_id')},"
@@ -1266,7 +1274,7 @@ class TvpPlugin(Plugin):
         if vod:
             if paid:
                 xbmcgui.Dialog().notification('[B]TVP[/B]', L(30158, '[ABO zone] Information'),
-                                                  xbmcgui.NOTIFICATION_INFO, 8000, False)
+                                              xbmcgui.NOTIFICATION_INFO, 8000, False)
                 self.play_failed()
             else:
                 if data.get('code') == 'ITEM_NOT_PAID':
@@ -1389,7 +1397,6 @@ class TvpPlugin(Plugin):
         stream_url = data['sources']['MP4'][0]['src']
         stream = Stream(stream_url, None, None, None)
         self._play(stream)
-        
 
     def subt_gen_abo(self, d):
         """Tablica z linkami do plików z napisami (format .ssa)."""
@@ -1499,7 +1506,8 @@ class TvpPlugin(Plugin):
                 return con.details(item['id'])
 
         now = datetime.now()
-        url = f'https://sport.tvp.pl/api/tvp-stream/search?query={query}&scope=bestresults&page=1&limit=&device=android'
+        url = (f'https://sport.tvp.pl/api/tvp-stream/search?query={query}'
+               '&scope=bestresults&page=1&limit=&device=android')
         with self.directory() as kdir:
             items = self.site.jget(url).get('data', {}).get('occurrenceitem', ())
             with self.site.concurrent() as con:
@@ -1549,7 +1557,8 @@ class TvpPlugin(Plugin):
                 'platform': 'BROWSER'
             })
             if page.get('paymentSchedules'):
-                kdir.play(page['title'] + ' [PŁATNE]', call(self.video, page['id'], vod=True, paid=True), descr=page.get('lead'))
+                kdir.play(page['title'] + ' [PŁATNE]', call(self.video, page['id'], vod=True, paid=True),
+                          descr=page.get('lead'))
             else:
                 info = {
                     'title': page['title'],
@@ -1558,7 +1567,7 @@ class TvpPlugin(Plugin):
                 kdir.play(page['title'], call(self.video, page['id'], vod=True), info=info, descr=page.get('lead'))
             if page.get('trailer'):
                 kdir.play(page['title'] + ' [Zwiastun]', call(self.trailer, page['id']), descr=page.get('lead'))
-    
+
     def vod_serial_results(self, id: PathArg[int]):
         with self.directory() as kdir:
             page = self.site.jget(f'https://vod.tvp.pl/api/products/vods/serials/{id}/seasons', params={
@@ -1567,13 +1576,14 @@ class TvpPlugin(Plugin):
             })
             for item in page:
                 kdir.menu(item['title'], call(self.seasons, id, item['id']))
-                
+
     def seasons(self, id: PathArg[int], s_id: PathArg[int]):
         with self.directory() as kdir:
-            page = self.site.jget(f'https://vod.tvp.pl/api/products/vods/serials/{id}/seasons/{s_id}/episodes', params={
-                'lang': 'pl',
-                'platform': 'BROWSER'
-            })
+            page = self.site.jget(f'https://vod.tvp.pl/api/products/vods/serials/{id}/seasons/{s_id}/episodes',
+                                  params={
+                                      'lang': 'pl',
+                                      'platform': 'BROWSER'
+                                  })
             for item in page:
                 kdir.play(item['title'], call(self.video, item['id'], vod=True))
 
@@ -1719,8 +1729,9 @@ class TvpPlugin(Plugin):
 
                 else:
                     offset = timezone_offset("Europe/Warsaw")
-                    begin_str = (datetime.fromtimestamp(int(begin)) - timedelta(hours=offset)).strftime('%Y%m%dT%H%M%S')
-                    end_str = (datetime.fromtimestamp(int(end)) - timedelta(hours=offset)).strftime('%Y%m%dT%H%M%S')
+                    fmt = '%Y%m%dT%H%M%S'
+                    begin_str = (datetime.fromtimestamp(int(begin)) - timedelta(hours=offset)).strftime(fmt)
+                    end_str = (datetime.fromtimestamp(int(end)) - timedelta(hours=offset)).strftime(fmt)
 
                 if begin_str:
                     begin_tag = '?begin='
