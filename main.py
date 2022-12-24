@@ -1608,7 +1608,8 @@ class TvpPlugin(Plugin):
                                   })
             for item in page:
                 info = {
-                    'title': f"{item.get('season')['serial']['title']} {item['title']}"
+                    'title': f"{item.get('season')['serial']['title']} {item['title']}",
+                    'plot': item.get('lead')
                 }
                 art = {
                     'fanart': image_source(item, '16x9')[0],
