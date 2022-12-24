@@ -1597,8 +1597,7 @@ class TvpPlugin(Plugin):
                 'platform': 'BROWSER'
             })
             for item in page:
-                art = {'fanart': image_source(page, '16x9')[0], 'poster': image_source(page, '3x4')[0]}
-                kdir.menu(item['title'], call(self.seasons, id, item['id']), art=art)
+                kdir.menu(item['title'], call(self.seasons, id, item['id']))
 
     def seasons(self, id: PathArg[int], s_id: PathArg[int]):
         with self.directory() as kdir:
