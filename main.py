@@ -12,6 +12,7 @@ from libka.settings import Settings
 # from pdom import select as dom_select
 from urllib.parse import quote
 import json
+import xbmcaddon # for default add-on image TODO: fill get_default_art() function from libka
 from collections.abc import Mapping
 from collections import namedtuple, UserList, UserDict
 from html import unescape
@@ -128,6 +129,11 @@ def image_link(image):
     name, _, ext = fname.rpartition('.')
     return URL(f'http://s.v3.tvp.pl/images/{name[:1]}/{name[1:2]}/{name[2:3]}/uid_{name}_width_{width}_gs_0.{ext}')
 
+def image_source(item, size):
+    if item.get('images') and item.get('images', {}).get(size):
+        return [f"{item.get('images', {}).get(size, {})[0]['url']}"]
+    else:
+        return xbmcaddon.Addon().getAddonInfo('icon'),
 
 StreamType = namedtuple('StreamType', 'proto mime')
 Stream = namedtuple('Stream', 'url proto mime begin')
@@ -1540,15 +1546,30 @@ class TvpPlugin(Plugin):
             if s_type == 'movie':
                 data = self.site.vod_search_data(query, 'movie')
                 for item in data['items']:
-                    kdir.menu(item['title'], call(self.vod_results, item['id']), descr=item.get('lead'))
+                    info = {
+                        'title': item['title'],
+                        'plot': item.get('lead')
+                    }
+                    art = {'fanart': image_source(item, '16x9')[0], 'poster': image_source(item, '3x4')[0]}
+                    kdir.menu(item['title'], call(self.vod_results, item['id']), descr=item.get('lead'), info=info, art=art)
             if s_type == 'serial':
                 data = self.site.vod_search_data(query, 'serial')
                 for item in data['items']:
-                    kdir.menu(item['title'], call(self.vod_serial_results, item['id']), descr=item.get('lead'))
+                    info = {
+                        'title': item['title'],
+                        'plot': item.get('lead')
+                    }
+                    art = {'fanart': image_source(item, '16x9')[0], 'poster': image_source(item, '3x4')[0]}
+                    kdir.menu(item['title'], call(self.vod_serial_results, item['id']), descr=item.get('lead'), info=info, art=art)
             if s_type == 'episode':
                 data = self.site.vod_search_data(query, 'episode')
                 for item in data['items']:
-                    kdir.menu(item['title'], call(self.vod_results, item['id']), descr=item.get('lead'))
+                    info = {
+                        'title': item['title'],
+                        'plot': item.get('lead')
+                    }
+                    art = {'fanart': image_source(item, '16x9')[0], 'poster': image_source(item, '3x4')[0]}
+                    kdir.menu(item['title'], call(self.vod_results, item['id']), descr=item.get('lead'), info=info, art=art)
 
     def vod_results(self, id: PathArg[int]):
         with self.directory() as kdir:
@@ -1556,15 +1577,16 @@ class TvpPlugin(Plugin):
                 'lang': 'pl',
                 'platform': 'BROWSER'
             })
+            art = {'fanart': image_source(page, '16x9')[0], 'poster': image_source(page, '3x4')[0]}
             if page.get('paymentSchedules'):
                 kdir.play(page['title'] + ' [PŁATNE]', call(self.video, page['id'], vod=True, paid=True),
-                          descr=page.get('lead'))
+                          descr=page.get('lead'), art=art)
             else:
                 info = {
                     'title': page['title'],
                     'plot': page.get('lead')
                 }
-                kdir.play(page['title'], call(self.video, page['id'], vod=True), info=info, descr=page.get('lead'))
+                kdir.play(page['title'], call(self.video, page['id'], vod=True), info=info, descr=page.get('lead'), art=art)
             if page.get('trailer'):
                 kdir.play(page['title'] + ' [Zwiastun]', call(self.trailer, page['id']), descr=page.get('lead'))
 
@@ -1575,7 +1597,8 @@ class TvpPlugin(Plugin):
                 'platform': 'BROWSER'
             })
             for item in page:
-                kdir.menu(item['title'], call(self.seasons, id, item['id']))
+                art = {'fanart': image_source(page, '16x9')[0], 'poster': image_source(page, '3x4')[0]}
+                kdir.menu(item['title'], call(self.seasons, id, item['id']), art=art)
 
     def seasons(self, id: PathArg[int], s_id: PathArg[int]):
         with self.directory() as kdir:
@@ -1585,7 +1608,14 @@ class TvpPlugin(Plugin):
                                       'platform': 'BROWSER'
                                   })
             for item in page:
-                kdir.play(item['title'], call(self.video, item['id'], vod=True))
+                info = {
+                    'title': f"{item.get('season')['serial']['title']} {item['title']}"
+                }
+                art = {
+                    'fanart': image_source(item, '16x9')[0],
+                    'poster': image_source(item, '3x4')[0],
+                }
+                kdir.play(info['title'], call(self.video, item['id'], vod=True), info=info, art=art)
 
     def bitrate_calculator(bitrate):
         bitrate_ = int(bitrate / 10000)
